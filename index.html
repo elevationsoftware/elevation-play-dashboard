@@ -42,10 +42,17 @@
   }
   .bar { margin-bottom: 18px; }
   .footbar { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+  /* Sign out is the reciprocal of the ghost buttons (Anthony,
+     October 29, 2026): solid gold, black words — it stands out. */
+  #signoutBtn { background: var(--gold); color: #191104; border-color: var(--gold); font-weight: 600; }
+  #signoutBtn:hover { background: #A98F52; }
   .wizard-btn { position: relative; }
   .wizard-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
   .wizard-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 11, 12, .72); z-index: 60; padding: 24px; }
-  .wizard-card { background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; max-width: 340px; width: 100%; padding: 30px 26px; text-align: center; animation: rise .45s ease-out; }
+  .wizard-overlay[hidden] { display: none; }
+  .wizard-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--hint); font-size: 20px; line-height: 1; padding: 6px; cursor: pointer; width: auto; }
+  .wizard-close:hover { color: var(--gold); }
+  .wizard-card { position: relative; background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; max-width: 340px; width: 100%; padding: 30px 26px; text-align: center; animation: rise .45s ease-out; }
   .wizard-card p { font-size: 17px; line-height: 1.55; color: var(--text); }
   h2 { font-size: 19px; margin: 0 0 4px; }
   .orgkind { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
@@ -122,7 +129,7 @@
 
 <script src="config.js"></script>
 <div id="wizardOverlay" class="wizard-overlay" hidden>
-  <div class="wizard-card"><p id="wizardText"></p></div>
+  <div class="wizard-card"><button id="wizardClose" class="wizard-close" aria-label="Close">&times;</button><p id="wizardText"></p></div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -393,6 +400,10 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
     try { localStorage.setItem("epsWizardSeen", String(cfg.wizardVersion)); } catch (e) {}
   });
   overlay.addEventListener("click", () => { overlay.hidden = true; });
+  document.getElementById("wizardClose").addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    overlay.hidden = true;
+  });
 })();
 
 document.getElementById("rainBtn").addEventListener("click", moneyRain);
