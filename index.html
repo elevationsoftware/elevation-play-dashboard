@@ -41,7 +41,12 @@
     border: 1px solid var(--gold); margin-top: 0;
   }
   .bar { margin-bottom: 18px; }
-  .footbar { margin-top: 28px; display: flex; gap: 12px; }
+  .footbar { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .wizard-btn { position: relative; }
+  .wizard-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
+  .wizard-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 11, 12, .72); z-index: 60; padding: 24px; }
+  .wizard-card { background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; max-width: 340px; width: 100%; padding: 30px 26px; text-align: center; animation: rise .45s ease-out; }
+  .wizard-card p { font-size: 17px; line-height: 1.55; color: var(--text); }
   h2 { font-size: 19px; margin: 0 0 4px; }
   .orgkind { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -67,7 +72,7 @@
   @media (prefers-reduced-motion: reduce) {
     h1, .sub, .bar, .card, .footbar { animation: none; }
   }
-  /* The Lucky Charms: a brief gold rain, on demand only — the
+  /* Gold Rush (named by Anthony): a brief gold rain, on demand only — the
      button at the bottom of the signed-in view, named by Anthony
      (October 29, 2026). Coins, not bills: this is a quiet gold
      mine. One pass, a few seconds, then stillness again. */
@@ -107,7 +112,8 @@
     </div>
     <div id="orgs"></div>
     <div class="footbar">
-      <button id="rainBtn" class="ghost">Lucky Charms</button>
+      <button id="wizardBtn" class="ghost wizard-btn" hidden>The Wizard<span id="wizardDot" class="wizard-dot" hidden></span></button>
+      <button id="rainBtn" class="ghost">Gold Rush</button>
       <button id="signoutBtn" class="ghost">Sign out</button>
     </div>
     <div id="fleetErr" class="err"></div>
@@ -115,6 +121,9 @@
 </div>
 
 <script src="config.js"></script>
+<div id="wizardOverlay" class="wizard-overlay" hidden>
+  <div class="wizard-card"><p id="wizardText"></p></div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const cfg = window.EPS_CONFIG || {};
@@ -360,6 +369,32 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
     btn.textContent = "Sign in";
   }
 });
+// The Wizard (Anthony's feature, October 29, 2026): a button in
+// the footbar that opens a small, bare card holding ONE sentence
+// of his, set in config (wizardText / wizardVersion). It changes
+// only when he changes it. A gold dot rests on the button while
+// the current sentence is unseen on this device; reading clears
+// it. Visible to every signed-in account - built mostly for the
+// client, seen by the owner too (his direction).
+(function initWizard() {
+  const text = (cfg.wizardText || "").trim();
+  if (!text || !cfg.wizardVersion) return;
+  const btn = document.getElementById("wizardBtn");
+  const dot = document.getElementById("wizardDot");
+  const overlay = document.getElementById("wizardOverlay");
+  document.getElementById("wizardText").textContent = text;
+  btn.hidden = false;
+  let seen = 0;
+  try { seen = Number(localStorage.getItem("epsWizardSeen") || 0); } catch (e) {}
+  if (seen < cfg.wizardVersion) dot.hidden = false;
+  btn.addEventListener("click", () => {
+    overlay.hidden = false;
+    dot.hidden = true;
+    try { localStorage.setItem("epsWizardSeen", String(cfg.wizardVersion)); } catch (e) {}
+  });
+  overlay.addEventListener("click", () => { overlay.hidden = true; });
+})();
+
 document.getElementById("rainBtn").addEventListener("click", moneyRain);
 
 document.getElementById("signoutBtn").addEventListener("click", async () => {
