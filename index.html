@@ -18,9 +18,7 @@
   /* Anthony's rule (October 28, 2026): content starts low, with a
      real gap below the top of the screen — never jammed to the edge. */
   .page { max-width: 920px; margin: 0 auto; padding: 72px 24px 64px; }
-  .brand { font-size: 26px; font-weight: 600; margin: 0 0 22px; text-align: center; }
-  .seal { display: block; height: 75px; margin: 54px auto 0; }
-  .seal-cap { color: var(--gold); font-size: 8px; font-weight: 600; letter-spacing: 1px; text-align: justify; text-align-last: justify; width: 46px; margin: 8px auto 0; white-space: nowrap; }
+  .brand { font-size: 22px; font-weight: 600; margin: 0 0 22px; text-align: center; color: var(--gold); }
   .card {
     background: var(--surface); border: 1px solid var(--outline);
     border-radius: 10px; padding: 24px; margin-bottom: 24px;
@@ -82,9 +80,9 @@
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .brand, .bar, .card, .seal, .seal-cap { animation: rise 0.6s ease-out both; }
+  .brand, .bar, .card { animation: rise 0.6s ease-out both; }
   @media (prefers-reduced-motion: reduce) {
-    .brand, .bar, .card, .seal, .seal-cap { animation: none; }
+    .brand, .bar, .card { animation: none; }
   }
   /* Gold Rush (named by Anthony): a brief gold rain, on demand only — the
      button at the bottom of the signed-in view, named by Anthony
@@ -105,7 +103,7 @@
 </head>
 <body>
 <div class="page">
-  <div class="brand">The Wizard</div>
+  <div class="brand">THE WIZARD</div>
 
   <div id="signin" class="card" hidden>
     <label for="email" id="emailLabel">Email</label>
@@ -134,8 +132,6 @@
     <div id="orgs"></div>
     <div id="fleetErr" class="err"></div>
   </div>
-  <img class="seal" src="wizard.png" alt="">
-  <div class="seal-cap">THE WIZARD</div>
 </div>
 
 <script src="config.js"></script>
