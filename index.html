@@ -40,7 +40,8 @@
     background: transparent; color: var(--gold);
     border: 1px solid var(--gold); margin-top: 0;
   }
-  .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #2c2f36; }
+  .bar { margin-bottom: 18px; }
+  .footbar { margin-top: 28px; }
   h2 { font-size: 19px; margin: 0 0 4px; }
   .orgkind { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -78,9 +79,11 @@
   <div id="fleet" hidden>
     <div class="bar">
       <div class="dim" id="who"></div>
-      <button id="signoutBtn" class="ghost">Sign out</button>
     </div>
     <div id="orgs"></div>
+    <div class="footbar">
+      <button id="signoutBtn" class="ghost">Sign out</button>
+    </div>
     <div id="fleetErr" class="err"></div>
   </div>
 </div>
@@ -107,7 +110,8 @@ function when(ts) {
 
 async function loadFleet(user) {
   hide("signin"); show("fleet");
-  document.getElementById("who").textContent = user.email;
+  document.getElementById("who").textContent =
+    (user.user_metadata && user.user_metadata.display_name) || user.email;
   const err = document.getElementById("fleetErr");
   err.textContent = "";
   // Every read's error is checked (TA's Step 8C review finding):
@@ -198,13 +202,10 @@ async function loadFleet(user) {
           : "<div class='note'>No units yet.</div>"));
     host.appendChild(card);
   });
-  if (testCount > 0) {
-    const note = document.createElement("div");
-    note.className = "note";
-    note.textContent = testCount + " test organization" +
-      (testCount === 1 ? "" : "s") + " not shown.";
-    host.appendChild(note);
-  }
+  // Test organizations stay excluded from the display, silently —
+  // at Anthony's direction (October 29, 2026) the "not shown" line
+  // itself was removed from the page. The count is still computed
+  // above; nothing about the exclusion changed, only its announcement.
 }
 
 async function boot() {
