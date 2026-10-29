@@ -40,13 +40,15 @@
     background: transparent; color: var(--gold);
     border: 1px solid var(--gold); margin-top: 0;
   }
-  .bar { margin-bottom: 18px; }
-  .footbar { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
-  /* Sign out is the reciprocal of the ghost buttons (Anthony,
-     October 29, 2026): solid gold, black words — it stands out. */
-  #signoutBtn { background: var(--gold); color: #191104; border-color: var(--gold); font-weight: 600; }
-  #signoutBtn:hover { background: #A98F52; }
-  .wizard-btn { position: relative; }
+  .bar { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+  .menu-wrap { position: relative; }
+  .menu-btn { position: relative; width: auto; padding: 7px 13px; background: var(--surface); border: 1px solid var(--outline); border-radius: 10px; color: var(--text); font-size: 17px; line-height: 1.2; cursor: pointer; }
+  .menu-panel { position: absolute; right: 0; top: calc(100% + 8px); background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; min-width: 204px; padding: 6px; z-index: 50; box-shadow: 0 12px 32px rgba(0, 0, 0, .5); }
+  .menu-panel[hidden] { display: none; }
+  .menu-item { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 11px 12px; font-size: 15px; border-radius: 8px; cursor: pointer; margin: 0; }
+  .menu-item:hover { background: #26292f; }
+  .menu-item.gold { background: var(--gold); color: #191104; font-weight: 600; text-align: center; margin-top: 6px; }
+  .menu-item.gold:hover { background: #A98F52; }
   .wizard-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
   .wizard-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 11, 12, .72); z-index: 60; padding: 24px; }
   .wizard-overlay[hidden] { display: none; }
@@ -75,9 +77,9 @@
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  h1, .sub, .bar, .card, .footbar { animation: rise 0.6s ease-out both; }
+  h1, .sub, .bar, .card { animation: rise 0.6s ease-out both; }
   @media (prefers-reduced-motion: reduce) {
-    h1, .sub, .bar, .card, .footbar { animation: none; }
+    h1, .sub, .bar, .card { animation: none; }
   }
   /* Gold Rush (named by Anthony): a brief gold rain, on demand only — the
      button at the bottom of the signed-in view, named by Anthony
@@ -116,13 +118,16 @@
   <div id="fleet" hidden>
     <div class="bar">
       <div class="dim" id="who"></div>
+      <div class="menu-wrap">
+        <button id="menuBtn" class="menu-btn" aria-label="Menu">&#9776;<span id="wizardDot" class="wizard-dot" hidden></span></button>
+        <div id="menuPanel" class="menu-panel" hidden>
+          <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
+          <button id="rainBtn" class="menu-item">Gold Rush</button>
+          <button id="signoutBtn" class="menu-item gold">Sign out</button>
+        </div>
+      </div>
     </div>
     <div id="orgs"></div>
-    <div class="footbar">
-      <button id="wizardBtn" class="ghost wizard-btn" hidden>The Wizard<span id="wizardDot" class="wizard-dot" hidden></span></button>
-      <button id="rainBtn" class="ghost">Gold Rush</button>
-      <button id="signoutBtn" class="ghost">Sign out</button>
-    </div>
     <div id="fleetErr" class="err"></div>
   </div>
 </div>
@@ -403,6 +408,24 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
   document.getElementById("wizardClose").addEventListener("click", (ev) => {
     ev.stopPropagation();
     overlay.hidden = true;
+  });
+})();
+
+// The top-right menu (Anthony's layout, October 29, 2026): one
+// small button holds The Wizard, Gold Rush, and Sign out, so the
+// page body stays clear for the company cards and the controls
+// that will one day live on them. Any item click closes the menu;
+// a click anywhere outside closes it too.
+(function initMenu() {
+  const btn = document.getElementById("menuBtn");
+  const panel = document.getElementById("menuPanel");
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    panel.hidden = !panel.hidden;
+  });
+  panel.addEventListener("click", () => { panel.hidden = true; });
+  document.addEventListener("click", (ev) => {
+    if (!panel.hidden && !ev.target.closest(".menu-wrap")) panel.hidden = true;
   });
 })();
 
