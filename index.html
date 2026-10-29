@@ -41,7 +41,7 @@
     border: 1px solid var(--gold); margin-top: 0;
   }
   .bar { margin-bottom: 18px; }
-  .footbar { margin-top: 28px; }
+  .footbar { margin-top: 28px; display: flex; gap: 12px; }
   h2 { font-size: 19px; margin: 0 0 4px; }
   .orgkind { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -67,9 +67,10 @@
   @media (prefers-reduced-motion: reduce) {
     h1, .sub, .bar, .card, .footbar { animation: none; }
   }
-  /* A brief gold rain when the dashboard opens after sign-in —
-     Anthony's request (October 29, 2026). Coins, not bills: this
-     is a quiet gold mine. One pass, a few seconds, then gone. */
+  /* The Lucky Charms: a brief gold rain, on demand only — the
+     button at the bottom of the signed-in view, named by Anthony
+     (October 29, 2026). Coins, not bills: this is a quiet gold
+     mine. One pass, a few seconds, then stillness again. */
   .rain { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 50; }
   .coin {
     position: absolute; top: -40px; border-radius: 50%;
@@ -89,8 +90,8 @@
   <div class="sub">EPS Dashboard</div>
 
   <div id="signin" class="card" hidden>
-    <label for="email">Email</label>
-    <input id="email" type="email" autocomplete="username">
+    <label for="email">Email or username</label>
+    <input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
     <label for="password">Password</label>
     <div class="pw-wrap">
       <input id="password" type="password" autocomplete="current-password">
@@ -106,6 +107,7 @@
     </div>
     <div id="orgs"></div>
     <div class="footbar">
+      <button id="rainBtn" class="ghost">Lucky Charms</button>
       <button id="signoutBtn" class="ghost">Sign out</button>
     </div>
     <div id="fleetErr" class="err"></div>
@@ -159,7 +161,6 @@ function moneyRain() {
 }
 
 async function loadFleet(user) {
-  moneyRain();
   hide("signin"); show("fleet");
   document.getElementById("who").textContent =
     (user.user_metadata && user.user_metadata.display_name) || user.email;
@@ -301,8 +302,24 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Signing in…";
   try {
+    // Sign-in accepts an email or a username. A username is one
+    // word (Anthony's rule, October 29, 2026): it is normalized -
+    // lowercased, spaces stripped - and resolved to the account's
+    // email through eps.email_for_username before the password
+    // check, which then proceeds exactly as an email sign-in.
+    const identifier = document.getElementById("email").value.trim();
+    let email = identifier;
+    if (!identifier.includes("@")) {
+      const username = identifier.toLowerCase().replace(/\s+/g, "");
+      const lookup = await eps().rpc("email_for_username", { p_username: username });
+      if (lookup.error || !lookup.data) {
+        err.textContent = "Invalid login credentials";
+        return;
+      }
+      email = lookup.data;
+    }
     const { data, error } = await client.auth.signInWithPassword({
-      email: document.getElementById("email").value.trim(),
+      email,
       password: document.getElementById("password").value,
     });
     if (error) {
@@ -313,7 +330,7 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
       err.textContent = "Sign-in did not complete — please try again.";
       return;
     }
-    loadFleet(data.user);
+    await loadFleet(data.user);
   } catch (e) {
     err.textContent = "Sign-in failed: " + (e && e.message ? e.message : e);
   } finally {
@@ -321,6 +338,8 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
     btn.textContent = "Sign in";
   }
 });
+document.getElementById("rainBtn").addEventListener("click", moneyRain);
+
 document.getElementById("signoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
   location.reload();
