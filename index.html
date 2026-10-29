@@ -67,6 +67,20 @@
   @media (prefers-reduced-motion: reduce) {
     h1, .sub, .bar, .card, .footbar { animation: none; }
   }
+  /* A brief gold rain when the dashboard opens after sign-in —
+     Anthony's request (October 29, 2026). Coins, not bills: this
+     is a quiet gold mine. One pass, a few seconds, then gone. */
+  .rain { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 50; }
+  .coin {
+    position: absolute; top: -40px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #E8CE8F, #C8A86A 60%, #A98F52);
+    color: #191104; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; animation-name: coinfall; animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+  @keyframes coinfall {
+    to { transform: translateY(112vh) rotate(320deg); }
+  }
 </style>
 </head>
 <body>
@@ -103,7 +117,9 @@
 <script>
 const cfg = window.EPS_CONFIG || {};
 const configured = cfg.url && cfg.anonKey && !cfg.anonKey.includes("PASTE");
-const client = configured ? supabase.createClient(cfg.url, cfg.anonKey) : null;
+const client = (configured && window.supabase)
+  ? supabase.createClient(cfg.url, cfg.anonKey)
+  : null;
 const eps = () => client.schema("eps");
 
 function show(id) { document.getElementById(id).hidden = false; }
@@ -118,7 +134,32 @@ function when(ts) {
   return d.toLocaleString();
 }
 
+function moneyRain() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const layer = document.createElement("div");
+  layer.className = "rain";
+  for (let i = 0; i < 36; i++) {
+    const c = document.createElement("div");
+    c.className = "coin";
+    const size = 13 + Math.random() * 14;
+    c.style.width = size + "px";
+    c.style.height = size + "px";
+    c.style.left = (Math.random() * 100) + "vw";
+    c.style.animationDuration = (1.8 + Math.random() * 1.4) + "s";
+    c.style.animationDelay = (Math.random() * 0.6) + "s";
+    c.style.opacity = 0.75 + Math.random() * 0.25;
+    if (i % 3 === 0) {
+      c.textContent = "$";
+      c.style.fontSize = (size * 0.62) + "px";
+    }
+    layer.appendChild(c);
+  }
+  document.body.appendChild(layer);
+  setTimeout(() => layer.remove(), 4200);
+}
+
 async function loadFleet(user) {
+  moneyRain();
   hide("signin"); show("fleet");
   document.getElementById("who").textContent =
     (user.user_metadata && user.user_metadata.display_name) || user.email;
