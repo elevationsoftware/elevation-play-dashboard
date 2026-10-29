@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Elevation Software — EPS Fleet</title>
+<title>Elevation Software — EPS Dashboard</title>
 <style>
   :root {
     --bg: #0E0F11; --surface: #1E2126; --text: #F7F3E9;
@@ -61,7 +61,7 @@
 <body>
 <div class="page">
   <h1>Elevation Software</h1>
-  <div class="sub">EPS Fleet Dashboard</div>
+  <div class="sub">EPS Dashboard</div>
 
   <div id="signin" class="card" hidden>
     <label for="email">Email</label>
@@ -131,7 +131,7 @@ async function loadFleet(user) {
     reads.map(r => r.data);
   if (reads[0].error) { err.textContent = reads[0].error.message; return; }
   if (failed.length) {
-    err.textContent = "Some fleet data could not be loaded (" +
+    err.textContent = "Some data could not be loaded (" +
       failed.join(", ") + ") — what is shown may be incomplete.";
   }
   // Account state comes from the system's own computation
@@ -155,7 +155,7 @@ async function loadFleet(user) {
   const host = document.getElementById("orgs");
   host.innerHTML = "";
   if (!orgs || orgs.length === 0) {
-    host.innerHTML = '<div class="card">This account has no fleet access.' +
+    host.innerHTML = '<div class="card">This account has no access.' +
       '<div class="note">Access is granted by membership — ask the operator to provision this account.</div></div>';
     return;
   }
@@ -195,7 +195,7 @@ async function loadFleet(user) {
         ? "<div class='note'>Units unavailable — the units read failed.</div>"
         : (rows
           ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
-          : "<div class='note'>No units in this fleet yet.</div>"));
+          : "<div class='note'>No units yet.</div>"));
     host.appendChild(card);
   });
   if (testCount > 0) {
