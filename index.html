@@ -90,7 +90,7 @@
   <div class="sub">EPS Dashboard</div>
 
   <div id="signin" class="card" hidden>
-    <label for="email">Email or username</label>
+    <label for="email" id="emailLabel">Email</label>
     <input id="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
     <label for="password">Password</label>
     <div class="pw-wrap">
@@ -267,6 +267,9 @@ async function boot() {
     err.textContent = "The sign-in library could not be loaded — check your connection and reopen the page.";
     return;
   }
+  if (cfg.usernameSignIn) {
+    document.getElementById("emailLabel").textContent = "Email or username";
+  }
   if (!configured) {
     show("signin");
     err.textContent =
@@ -302,24 +305,43 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Signing in…";
   try {
-    // Sign-in accepts an email or a username. A username is one
-    // word (Anthony's rule, October 29, 2026): it is normalized -
-    // lowercased, spaces stripped - and resolved to the account's
-    // email through eps.email_for_username before the password
-    // check, which then proceeds exactly as an email sign-in.
+    // Sign-in accepts an email, and — once the username gate is
+    // live and config enables it — a username. A username is one
+    // word (Anthony's rule, October 29, 2026): normalized here
+    // (lowercased, spaces stripped), then sent WITH the password
+    // to the eps-username-signin function, which resolves the
+    // account email on the server and performs the password check
+    // there. The email never reaches the browser, and every
+    // failure — unknown username or wrong password — returns the
+    // same generic message. (TA's condition on PR #51: no
+    // anon-callable email lookup; the audited anon boundary holds.)
     const identifier = document.getElementById("email").value.trim();
-    let email = identifier;
-    if (!identifier.includes("@")) {
+    const password = document.getElementById("password").value;
+    if (!identifier.includes("@") && cfg.usernameSignIn) {
       const username = identifier.toLowerCase().replace(/\s+/g, "");
-      const lookup = await eps().rpc("email_for_username", { p_username: username });
-      if (lookup.error || !lookup.data) {
+      const resp = await fetch(cfg.url + "/functions/v1/eps-username-signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "apikey": cfg.anonKey },
+        body: JSON.stringify({ username, password }),
+      });
+      const payload = await resp.json().catch(() => null);
+      if (!resp.ok || !payload || !payload.access_token || !payload.refresh_token) {
         err.textContent = "Invalid login credentials";
         return;
       }
-      email = lookup.data;
+      const session = await client.auth.setSession({
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token,
+      });
+      if (session.error || !session.data.user) {
+        err.textContent = "Invalid login credentials";
+        return;
+      }
+      await loadFleet(session.data.user);
+      return;
     }
     const { data, error } = await client.auth.signInWithPassword({
-      email,
+      email: identifier,
       password: document.getElementById("password").value,
     });
     if (error) {
