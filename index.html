@@ -40,7 +40,11 @@
     background: transparent; color: var(--gold);
     border: 1px solid var(--gold); margin-top: 0;
   }
-  .bar { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+  /* The bar carries position + z-index so the menu panel paints
+     ABOVE the company cards: the entrance animation gives every
+     card its own stacking layer, and without this the panel
+     opened behind them (Anthony's screenshot, October 29, 2026). */
+  .bar { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 70; }
   .menu-wrap { position: relative; }
   .menu-btn { position: relative; width: auto; padding: 7px 13px; background: var(--surface); border: 1px solid var(--outline); border-radius: 10px; color: var(--text); font-size: 17px; line-height: 1.2; cursor: pointer; }
   .menu-panel { position: absolute; right: 0; top: calc(100% + 8px); background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; min-width: 204px; padding: 6px; z-index: 50; box-shadow: 0 12px 32px rgba(0, 0, 0, .5); }
