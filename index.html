@@ -18,7 +18,7 @@
   /* Anthony's rule (October 28, 2026): content starts low, with a
      real gap below the top of the screen — never jammed to the edge. */
   .page { max-width: 920px; margin: 0 auto; padding: 72px 24px 64px; }
-  .brand { font-size: 22px; font-weight: 600; margin: 0 0 22px; text-align: center; color: var(--gold); }
+  .brand { font-family: Georgia, 'Times New Roman', serif; font-size: 17px; font-weight: 400; letter-spacing: 0.02em; margin: 0 0 22px; text-align: center; color: var(--text); }
   .card {
     background: var(--surface); border: 1px solid var(--outline);
     border-radius: 10px; padding: 24px; margin-bottom: 24px;
@@ -103,7 +103,7 @@
 </head>
 <body>
 <div class="page">
-  <div class="brand">THE WIZARD</div>
+  <div class="brand">the wizard.</div>
 
   <div id="signin" class="card" hidden>
     <label for="email" id="emailLabel">Email</label>
