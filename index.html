@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elevation Software — EPS Fleet</title>
+<style>
+  :root {
+    --bg: #0E0F11; --surface: #1E2126; --text: #F7F3E9;
+    --secondary: #CFC8B8; --hint: #B5AB93; --gold: #C8A86A;
+    --gold-pressed: #A98F52; --outline: #8A7B5C; --on-gold: #191104;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  /* Anthony's rule (October 28, 2026): content starts low, with a
+     real gap below the top of the screen — never jammed to the edge. */
+  .page { max-width: 920px; margin: 0 auto; padding: 72px 24px 64px; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; }
+  .sub { color: var(--secondary); font-size: 14px; margin-bottom: 36px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--outline);
+    border-radius: 10px; padding: 24px; margin-bottom: 24px;
+  }
+  label { display: block; font-size: 13px; color: var(--secondary); margin: 14px 0 6px; }
+  input {
+    width: 100%; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid var(--outline); background: var(--bg);
+    color: var(--text); font-size: 15px;
+  }
+  button {
+    margin-top: 20px; padding: 10px 22px; border: 0; border-radius: 6px;
+    background: var(--gold); color: var(--on-gold);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button:active { background: var(--gold-pressed); }
+  button.ghost {
+    background: transparent; color: var(--gold);
+    border: 1px solid var(--gold); margin-top: 0;
+  }
+  .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  h2 { font-size: 19px; margin: 0 0 4px; }
+  .orgkind { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--hint); font-weight: 500; padding: 8px 10px 8px 0; }
+  td { padding: 8px 10px 8px 0; border-top: 1px solid #2c2f36; color: var(--text); }
+  td.dim, .dim { color: var(--secondary); }
+  .err { color: #e8a0a0; font-size: 14px; margin-top: 14px; min-height: 18px; }
+  .pw-wrap { position: relative; }
+  .pw-wrap input { padding-right: 48px; }
+  .eye {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    margin: 0; padding: 6px 9px; background: transparent; border: 0;
+    color: var(--secondary); font-size: 16px; cursor: pointer;
+  }
+  .note { color: var(--hint); font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Elevation Software</h1>
+  <div class="sub">EPS Fleet Dashboard</div>
+
+  <div id="signin" class="card" hidden>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="password">Password</label>
+    <div class="pw-wrap">
+      <input id="password" type="password" autocomplete="current-password">
+      <button id="pwToggle" type="button" class="eye" aria-label="Show password">&#128065;</button>
+    </div>
+    <button id="signinBtn">Sign in</button>
+    <div id="signinErr" class="err"></div>
+  </div>
+
+  <div id="fleet" hidden>
+    <div class="bar">
+      <div class="dim" id="who"></div>
+      <button id="signoutBtn" class="ghost">Sign out</button>
+    </div>
+    <div id="orgs"></div>
+    <div id="fleetErr" class="err"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const cfg = window.EPS_CONFIG || {};
+const configured = cfg.url && cfg.anonKey && !cfg.anonKey.includes("PASTE");
+const client = configured ? supabase.createClient(cfg.url, cfg.anonKey) : null;
+const eps = () => client.schema("eps");
+
+function show(id) { document.getElementById(id).hidden = false; }
+function hide(id) { document.getElementById(id).hidden = true; }
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function when(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleString();
+}
+
+async function loadFleet(user) {
+  hide("signin"); show("fleet");
+  document.getElementById("who").textContent = user.email;
+  const err = document.getElementById("fleetErr");
+  err.textContent = "";
+  // Every read's error is checked (TA's Step 8C review finding):
+  // a failed read is surfaced by name and its figures render as
+  // unknown — never silently treated as empty or healthy.
+  const reads = await Promise.all([
+      eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
+      eps().from("system_units").select("id, organization_id, unit_key, status"),
+      eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at"),
+      eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
+      eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
+      eps().from("notice_outbox").select("organization_id, state"),
+    ]);
+  const names = ["organizations", "units", "labels", "runtime state",
+                 "heartbeats", "billing periods", "notices"];
+  const failed = names.filter((_, i) => reads[i].error);
+  const unitsFailed = !!reads[1].error;
+  const noticesFailed = !!reads[6].error;
+  const [orgs, units, labels, runtime, beats, periods, notices] =
+    reads.map(r => r.data);
+  if (reads[0].error) { err.textContent = reads[0].error.message; return; }
+  if (failed.length) {
+    err.textContent = "Some fleet data could not be loaded (" +
+      failed.join(", ") + ") — what is shown may be incomplete.";
+  }
+  // Account state comes from the system's own computation
+  // (eps.account_org_entitlement_state), one call per visible
+  // organization; a failed or empty answer renders "unknown".
+  const stateOf = {};
+  await Promise.all((orgs || []).map(async org => {
+    const { data, error } = await eps().rpc(
+      "account_org_entitlement_state", { p_organization_id: org.id });
+    stateOf[org.id] = error ? null : data;
+  }));
+  const labelOf = {}, runtimeOf = {}, lastBeat = {}, periodOf = {}, noticeCount = {};
+  (labels || []).forEach(r => { labelOf[r.system_unit_id] = r.label; });
+  (runtime || []).forEach(r => { runtimeOf[r.system_unit_id] = r; });
+  (beats || []).forEach(r => { if (!lastBeat[r.system_unit_id]) lastBeat[r.system_unit_id] = r.recorded_at; });
+  (periods || []).forEach(r => { if (!periodOf[r.organization_id]) periodOf[r.organization_id] = r; });
+  (notices || []).forEach(r => {
+    if (r.state !== "sent") noticeCount[r.organization_id] = (noticeCount[r.organization_id] || 0) + 1;
+  });
+
+  const host = document.getElementById("orgs");
+  host.innerHTML = "";
+  if (!orgs || orgs.length === 0) {
+    host.innerHTML = '<div class="card">This account has no fleet access.' +
+      '<div class="note">Access is granted by membership — ask the operator to provision this account.</div></div>';
+    return;
+  }
+  // Test organizations (designated in the data, S6B) are kept
+  // out of the fleet view; the exclusion itself is shown, never
+  // silent. Their records stay in the system untouched.
+  const testCount = orgs.filter(o => o.is_test).length;
+  const fleets = orgs.filter(o => !o.is_test);
+  fleets.forEach(org => {
+    const rows = (units || []).filter(u => u.organization_id === org.id).map(u => {
+      const rt = runtimeOf[u.id] || {};
+      return "<tr><td>" + esc(labelOf[u.id] || u.unit_key) + "</td>" +
+        "<td>" + esc(u.status) + "</td>" +
+        "<td class='dim'>" + esc(rt.current_platform || "—") + "</td>" +
+        "<td class='dim'>" + when(lastBeat[u.id] || rt.updated_at) + "</td></tr>";
+    }).join("");
+    const period = periodOf[org.id];
+    const billing = org.is_root_authority
+      ? "Owner organization — not billed"
+      : (periods === null ? "unknown"
+        : (period ? esc(period.service_month) + " · " + esc(period.billing_state)
+                  : "No billing period yet"));
+    const accountState = stateOf[org.id] === "owner"
+      ? "owner authority"
+      : (stateOf[org.id] || "unknown");
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML =
+      "<h2>" + esc(org.display_name) + "</h2>" +
+      "<div class='orgkind'>" + (org.is_root_authority ? "Owner" : "Client") +
+        " · Account: " + esc(accountState) +
+        " · Billing: " + billing +
+        (noticesFailed ? " · Unsent notices: unknown"
+          : (noticeCount[org.id] ? " · Unsent notices: " + noticeCount[org.id] : "")) +
+      "</div>" +
+      (unitsFailed
+        ? "<div class='note'>Units unavailable — the units read failed.</div>"
+        : (rows
+          ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
+          : "<div class='note'>No units in this fleet yet.</div>"));
+    host.appendChild(card);
+  });
+  if (testCount > 0) {
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = testCount + " test organization" +
+      (testCount === 1 ? "" : "s") + " not shown.";
+    host.appendChild(note);
+  }
+}
+
+async function boot() {
+  const err = document.getElementById("signinErr");
+  if (!window.supabase) {
+    show("signin");
+    err.textContent = "The sign-in library could not be loaded — check your connection and reopen the page.";
+    return;
+  }
+  if (!configured) {
+    show("signin");
+    err.textContent =
+      "Dashboard not configured yet — the project anon key goes in config.js.";
+    return;
+  }
+  try {
+    const { data: { session } } = await client.auth.getSession();
+    if (session) loadFleet(session.user); else show("signin");
+  } catch (e) {
+    show("signin");
+    err.textContent = "Could not reach the sign-in service: " + (e && e.message ? e.message : e);
+  }
+}
+
+document.getElementById("pwToggle").addEventListener("click", () => {
+  const pw = document.getElementById("password");
+  const showing = pw.type === "text";
+  pw.type = showing ? "password" : "text";
+  document.getElementById("pwToggle").innerHTML = showing ? "&#128065;" : "&#128584;";
+});
+
+document.getElementById("signinBtn").addEventListener("click", async () => {
+  const err = document.getElementById("signinErr");
+  const btn = document.getElementById("signinBtn");
+  err.textContent = "";
+  if (!client) {
+    err.textContent = "Dashboard not configured yet — the project anon key goes in config.js.";
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+  try {
+    const { data, error } = await client.auth.signInWithPassword({
+      email: document.getElementById("email").value.trim(),
+      password: document.getElementById("password").value,
+    });
+    if (error) {
+      err.textContent = error.message;
+      return;
+    }
+    if (!data || !data.user) {
+      err.textContent = "Sign-in did not complete — please try again.";
+      return;
+    }
+    loadFleet(data.user);
+  } catch (e) {
+    err.textContent = "Sign-in failed: " + (e && e.message ? e.message : e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Sign in";
+  }
+});
+document.getElementById("signoutBtn").addEventListener("click", async () => {
+  await client.auth.signOut();
+  location.reload();
+});
+boot();
+</script>
+</body>
+</html>
