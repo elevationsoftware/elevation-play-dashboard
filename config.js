@@ -9,8 +9,8 @@ window.EPS_CONFIG = {
   // The Wizard: one sentence of Anthony's, shown behind The Wizard
   // button. Empty = the button stays hidden. Bump wizardVersion
   // with every new sentence — the gold dot keys off it.
-  wizardText: "",
-  wizardVersion: 0,
+  wizardText: "Judge not a man by how he spends his wealth but through how he spends his time.",
+  wizardVersion: 1,
   url: "https://kbdaiiwdjkuhnbgbuosn.supabase.co",
   anonKey: "sb_publishable_fr7kiRO6QWa07ygamr1TIQ_wx4_Frg0",
 };
