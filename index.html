@@ -49,11 +49,11 @@
   td.dim, .dim { color: var(--secondary); }
   .err { color: #e8a0a0; font-size: 14px; margin-top: 14px; min-height: 18px; }
   .pw-wrap { position: relative; }
-  .pw-wrap input { padding-right: 48px; }
+  .pw-wrap input { padding-right: 64px; }
   .eye {
     position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
     margin: 0; padding: 6px 9px; background: transparent; border: 0;
-    color: var(--secondary); font-size: 16px; cursor: pointer;
+    color: var(--secondary); font-size: 13px; letter-spacing: 0.04em; cursor: pointer;
   }
   .note { color: var(--hint); font-size: 13px; margin-top: 10px; }
 </style>
@@ -69,7 +69,7 @@
     <label for="password">Password</label>
     <div class="pw-wrap">
       <input id="password" type="password" autocomplete="current-password">
-      <button id="pwToggle" type="button" class="eye" aria-label="Show password">&#128065;</button>
+      <button id="pwToggle" type="button" class="eye" aria-label="Show password">Show</button>
     </div>
     <button id="signinBtn">Sign in</button>
     <div id="signinErr" class="err"></div>
@@ -233,7 +233,9 @@ document.getElementById("pwToggle").addEventListener("click", () => {
   const pw = document.getElementById("password");
   const showing = pw.type === "text";
   pw.type = showing ? "password" : "text";
-  document.getElementById("pwToggle").innerHTML = showing ? "&#128065;" : "&#128584;";
+  const btn = document.getElementById("pwToggle");
+  btn.textContent = showing ? "Show" : "Hide";
+  btn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
 });
 
 document.getElementById("signinBtn").addEventListener("click", async () => {
