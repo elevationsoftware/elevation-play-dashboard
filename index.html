@@ -293,7 +293,7 @@ async function boot() {
     return;
   }
   if (cfg.usernameSignIn) {
-    document.getElementById("emailLabel").textContent = "Email or username";
+    document.getElementById("emailLabel").textContent = "Username";
   }
   if (!configured) {
     show("signin");
@@ -330,20 +330,32 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Signing in…";
   try {
-    // Sign-in accepts an email, and — once the username gate is
-    // live and config enables it — a username. A username is one
-    // word (Anthony's rule, October 29, 2026): normalized here
-    // (lowercased, spaces stripped), then sent WITH the password
-    // to the eps-username-signin function, which resolves the
-    // account email on the server and performs the password check
-    // there. The email never reaches the browser, and every
-    // failure — unknown username or wrong password — returns the
-    // same generic message. (TA's condition on PR #51: no
-    // anon-callable email lookup; the audited anon boundary holds.)
+    // Sign-in is by email, or — once the username gate is live
+    // and config enables it — by USERNAME ONLY (Anthony's
+    // decision, October 29, 2026): with usernameSignIn on, the
+    // form is Username + Password and this function path is the
+    // ONLY path; the email field and the direct email sign-in
+    // below are not reachable. A username is one word (his
+    // rule): the field shows exactly what was typed, and the
+    // value is lowercased only here, in the request — the
+    // one-word rule itself is enforced on the server, which
+    // refuses any whitespace with the same generic failure. The
+    // username goes WITH the password to the eps-username-signin
+    // function, which resolves the account email on the server
+    // and performs the password check there. The function
+    // returns only the minimal session fields and never returns
+    // the account email or the Auth user object; the form is
+    // username-only and displays no email (after sign-in the
+    // Supabase client holds the standard Auth session state,
+    // exactly as with email sign-in). Every failure — unknown
+    // username or wrong password — returns the same generic
+    // message.
+    // (TA's condition on PR #51: no anon-callable email lookup;
+    // the audited anon boundary holds.)
     const identifier = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
-    if (!identifier.includes("@") && cfg.usernameSignIn) {
-      const username = identifier.toLowerCase().replace(/\s+/g, "");
+    if (cfg.usernameSignIn) {
+      const username = identifier.toLowerCase();
       const resp = await fetch(cfg.url + "/functions/v1/eps-username-signin", {
         method: "POST",
         headers: { "Content-Type": "application/json", "apikey": cfg.anonKey },
