@@ -127,6 +127,7 @@
         <div id="menuPanel" class="menu-panel" hidden>
           <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
           <button id="rainBtn" class="menu-item">Gold Rush</button>
+          <button id="downloadBtn" class="menu-item">Download the app</button>
           <button id="signoutBtn" class="menu-item gold">Sign out</button>
         </div>
       </div>
@@ -446,6 +447,79 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
 })();
 
 document.getElementById("rainBtn").addEventListener("click", moneyRain);
+
+// Download the app (Step 9 Part 1, Anthony's design, October 29,
+// 2026): the signed-in account downloads the current production
+// build from inside the dashboard. The button asks the
+// eps-download function — with this session's own token — for
+// the current release's short-lived signed URL and opens it.
+// Membership is the authorization (the function checks it
+// server-side); the signed-out view never sees this button
+// because the menu lives in the fleet view.
+//
+// The handoff is gesture-safe: mobile browsers block a
+// window.open that happens after an await, when the click's
+// gesture has expired, so the handler opens a placeholder tab
+// SYNCHRONOUSLY — before any await — and points that tab at the
+// signed URL when it arrives. On failure the placeholder is
+// closed and the error shows here, as before; if the placeholder
+// itself was blocked (window.open returned null), the signed URL
+// is handed off through a programmatically created anchor
+// instead.
+document.getElementById("downloadBtn").addEventListener("click", async (ev) => {
+  const btn = ev.currentTarget;
+  const err = document.getElementById("fleetErr");
+  err.textContent = "";
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "Preparing download…";
+  // Inside the click gesture, before any await: the tab the
+  // download will land in.
+  const tab = window.open("", "_blank");
+  const abandonTab = () => { if (tab && !tab.closed) tab.close(); };
+  try {
+    const { data } = await client.auth.getSession();
+    const token = data && data.session ? data.session.access_token : null;
+    if (!token) {
+      abandonTab();
+      err.textContent = "Sign-in session expired — please sign in again.";
+      return;
+    }
+    const resp = await fetch(cfg.url + "/functions/v1/eps-download", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": cfg.anonKey,
+        "Authorization": "Bearer " + token,
+      },
+    });
+    const payload = await resp.json().catch(() => null);
+    if (!resp.ok || !payload || !payload.download_url) {
+      abandonTab();
+      err.textContent = resp.status === 404
+        ? "No production build is published yet."
+        : "Download failed — please try again.";
+      return;
+    }
+    if (tab) {
+      tab.location = payload.download_url;
+    } else {
+      const a = document.createElement("a");
+      a.href = payload.download_url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  } catch (e) {
+    abandonTab();
+    err.textContent = "Download failed: " + (e && e.message ? e.message : e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
 
 document.getElementById("signoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
