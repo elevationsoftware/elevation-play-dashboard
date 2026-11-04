@@ -173,6 +173,21 @@
     .ctl-btn { width: 100%; }
     .ctl-btn.reset { grid-column: 1 / -1; }
   }
+  /* Playlists (Step 3 remainder): the company's pool, inside
+     its expanded card under the units — one quiet section.
+     Entries are plain lines (number — name) with a small
+     REMOVE at the same ~20% rounding rule (26px tall, 5px
+     radius); the add forms are single rows of fields with an
+     ADD in the control voice. The section status line reuses
+     .cmd-line. */
+  .pl { margin-top: 18px; border-top: 1px solid #2c2f36; padding-top: 14px; }
+  .pl-head { font-size: 12.5px; color: var(--secondary); letter-spacing: .04em; }
+  .pl-plat { color: var(--hint); font-size: 12px; font-weight: 700; letter-spacing: .08em; margin-top: 12px; }
+  .pl-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14px; }
+  .pl-name { flex: 1; }
+  .ctl-btn.small { height: 26px; padding: 0 10px; border-radius: 5px; font-size: 11.5px; }
+  .pl-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+  .pl-form input { flex: 1 1 170px; width: auto; height: 34px; padding: 6px 10px; font-size: 14px; }
   /* The page rises as it loads — one quiet fade-and-lift, then
      stillness. Anthony's pick (October 29, 2026). */
   @keyframes rise {
@@ -378,6 +393,210 @@ const orgExpanded = {};    // org id -> bool: the operator's (or the default's) 
 const searchForce = new Set();  // org ids a unit-match in the search holds open while the query stands
 const resetTimers = {};    // unit id -> the confirm state's revert timer
 let renderedOrgs = [];     // org ids rendered by the latest loadFleet, in display order
+
+// Playlists (Step 3 remainder) — the production catalog's
+// operator surface. The catalog lives in the back end
+// (eps.playlist_entries); this section renders each company's
+// ACTIVE entries from the account's scoped table read, and
+// its two writes are the catalog definers over the Data API
+// with the signed-in session: eps.add_playlist_entry (Apple
+// takes the playlist link alone — the entry's name derives
+// server-side; YouTube takes the playlist link, one video
+// link from inside it, and a name — the watch link is composed
+// server-side, never here) and eps.retire_playlist_entry.
+// Neither definer takes an actor: authorization resolves
+// from this page's verified session inside the definer (the
+// organization must stand in the account's visible set;
+// EXECUTE to authenticated only). Coded
+// refusals render as plain lines on the section's own status
+// line; after any successful change the section re-reads that
+// company's entries — the table is the truth, never the form.
+// Phones receive changes at their next check-in; nothing here
+// pretends otherwise. REMOVE confirms inline, like the queue
+// reset: the button itself asks CONFIRM REMOVE? first.
+const playlistOf = {};     // org id -> active entries [{id, platform, number, name}] in pool order
+const plRemoveTimers = {}; // entry id -> the confirm state's revert timer
+
+function setPlLine(orgId, text, isErr) {
+  const el = document.getElementById("pl-line-" + orgId);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("bad", !!isErr);
+}
+
+// The catalog writes' coded refusals, in plain words.
+function playlistErrorLine(code) {
+  if (code === "P0523") return "NOT PERMITTED FOR THIS ACCOUNT";
+  if (code === "P0524") return "THAT PLAYLIST LINK WAS NOT VALID";
+  if (code === "P0525") return "THAT PLAYLIST IS ALREADY IN THE POOL";
+  return "COULD NOT SAVE — PLEASE TRY AGAIN";
+}
+
+function playlistsHtml(orgId) {
+  const entries = playlistOf[orgId] || [];
+  const apple = entries.filter(e => e.platform === "apple_music");
+  const yt = entries.filter(e => e.platform === "youtube");
+  const lines = list => list.map(e =>
+    "<div class='pl-row'><span class='pl-name'>" + esc(e.number) +
+    " — " + esc(e.name) + "</span>" +
+    "<button type='button' class='ctl-btn quiet small' data-plremove='" +
+    esc(e.id) + "' data-org='" + esc(orgId) + "'>REMOVE</button></div>"
+  ).join("");
+  return "<div class='pl'><div class='pl-head'>PLAYLISTS — " +
+    apple.length + " APPLE · " + yt.length + " YOUTUBE</div>" +
+    "<div class='pl-plat'>APPLE MUSIC</div>" + lines(apple) +
+    "<div class='pl-form'>" +
+    "<input id='pl-apple-link-" + esc(orgId) + "' type='text' " +
+      "placeholder='PLAYLIST LINK' aria-label='Apple Music playlist link'>" +
+    "<button type='button' class='ctl-btn' data-pladd='apple_music' " +
+      "data-org='" + esc(orgId) + "'>ADD</button></div>" +
+    "<div class='pl-plat'>YOUTUBE</div>" + lines(yt) +
+    "<div class='pl-form'>" +
+    "<input id='pl-yt-link-" + esc(orgId) + "' type='text' " +
+      "placeholder='PLAYLIST LINK' aria-label='YouTube playlist link'>" +
+    "<input id='pl-yt-video-" + esc(orgId) + "' type='text' " +
+      "placeholder='ONE VIDEO LINK FROM IT' aria-label='One video link from the playlist'>" +
+    "<input id='pl-yt-name-" + esc(orgId) + "' type='text' " +
+      "placeholder='NAME' aria-label='Playlist name'>" +
+    "<button type='button' class='ctl-btn' data-pladd='youtube' " +
+      "data-org='" + esc(orgId) + "'>ADD</button></div>" +
+    "<div class='cmd-line' id='pl-line-" + esc(orgId) + "'></div></div>";
+}
+
+// (Re)bind one company's playlist section: its buttons are
+// rebuilt with the section, so binding is per render.
+function bindPlaylists(orgId) {
+  const body = document.getElementById("orgbody-" + orgId);
+  if (!body) return;
+  body.querySelectorAll("[data-pladd]").forEach(btn => {
+    btn.addEventListener("click", () => addPlaylist(btn));
+  });
+  body.querySelectorAll("[data-plremove]").forEach(btn => {
+    btn.addEventListener("click", () => removePlaylist(btn));
+  });
+}
+
+function renderPlaylists(orgId) {
+  const hostEl = document.getElementById("plhost-" + orgId);
+  if (!hostEl) return;
+  hostEl.innerHTML = playlistsHtml(orgId);
+  bindPlaylists(orgId);
+}
+
+// Re-read one company's active entries and re-render its
+// section. Answers false when the read failed — the standing
+// presentation stays, and the caller says so plainly.
+async function refreshPlaylists(orgId) {
+  try {
+    const { data, error } = await eps().from("playlist_entries")
+      .select("id, platform, number, name")
+      .eq("organization_id", orgId).eq("active", true)
+      .order("platform").order("number");
+    if (error) return false;
+    playlistOf[orgId] = data || [];
+    renderPlaylists(orgId);
+    return true;
+  } catch (e) { return false; }
+}
+
+async function addPlaylist(btn) {
+  const orgId = btn.dataset.org;
+  const platform = btn.dataset.pladd;
+  if (!actorId) {
+    setPlLine(orgId, "SIGN-IN EXPIRED — RELOAD THE PAGE", true);
+    return;
+  }
+  let args;
+  if (platform === "apple_music") {
+    const linkEl = document.getElementById("pl-apple-link-" + orgId);
+    const link = ((linkEl && linkEl.value) || "").trim();
+    if (!link) {
+      setPlLine(orgId, "PASTE THE PLAYLIST LINK FIRST", true);
+      return;
+    }
+    args = {
+      p_organization_id: orgId,
+      p_platform: "apple_music", p_playlist_url: link,
+      p_video_url: null, p_name: null,
+    };
+  } else {
+    const field = id => {
+      const el = document.getElementById(id);
+      return ((el && el.value) || "").trim();
+    };
+    const link = field("pl-yt-link-" + orgId);
+    const video = field("pl-yt-video-" + orgId);
+    const name = field("pl-yt-name-" + orgId);
+    if (!link || !video || !name) {
+      setPlLine(orgId, "FILL IN ALL THREE FIELDS FIRST", true);
+      return;
+    }
+    args = {
+      p_organization_id: orgId,
+      p_platform: "youtube", p_playlist_url: link,
+      p_video_url: video, p_name: name,
+    };
+  }
+  btn.disabled = true;
+  try {
+    const { data, error } = await eps().rpc("add_playlist_entry", args);
+    if (error) {
+      setPlLine(orgId, playlistErrorLine(error.code), true);
+      return;
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    const addedName = row && row.name ? String(row.name) : null;
+    const fresh = await refreshPlaylists(orgId);
+    setPlLine(orgId, !fresh
+      ? "ADDED — RELOAD TO SEE THE POOL"
+      : "ADDED" + (addedName ? " — " + addedName : ""), false);
+  } catch (e) {
+    setPlLine(orgId, "COULD NOT SAVE — PLEASE TRY AGAIN", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function removePlaylist(btn) {
+  const orgId = btn.dataset.org;
+  const entryId = btn.dataset.plremove;
+  if (!actorId) {
+    setPlLine(orgId, "SIGN-IN EXPIRED — RELOAD THE PAGE", true);
+    return;
+  }
+  if (btn.dataset.confirming !== "1") {
+    btn.dataset.confirming = "1";
+    btn.textContent = "CONFIRM REMOVE?";
+    btn.classList.add("confirming");
+    clearTimeout(plRemoveTimers[entryId]);
+    plRemoveTimers[entryId] = setTimeout(() => {
+      btn.dataset.confirming = "";
+      btn.textContent = "REMOVE";
+      btn.classList.remove("confirming");
+    }, 4000);
+    return;
+  }
+  clearTimeout(plRemoveTimers[entryId]);
+  btn.dataset.confirming = "";
+  btn.classList.remove("confirming");
+  btn.disabled = true;
+  try {
+    const { error } = await eps().rpc("retire_playlist_entry", {
+      p_entry_id: entryId,
+    });
+    if (error) {
+      setPlLine(orgId, playlistErrorLine(error.code), true);
+      return;
+    }
+    const fresh = await refreshPlaylists(orgId);
+    setPlLine(orgId, fresh ? "REMOVED" : "REMOVED — RELOAD TO SEE THE POOL", false);
+  } catch (e) {
+    setPlLine(orgId, "COULD NOT REMOVE — PLEASE TRY AGAIN", true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "REMOVE";
+  }
+}
 
 // The runtime table stores its own platform vocabulary
 // ('apple' | 'youtube'); the display names the platform in full.
@@ -810,13 +1029,14 @@ async function loadFleet(user) {
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
       eps().from("physical_installations").select("system_unit_id, status, app_version_name, app_version_reported_at"),
+      eps().from("playlist_entries").select("id, organization_id, platform, number, name").eq("active", true).order("platform").order("number"),
     ]);
   const names = ["organizations", "units", "labels", "runtime state",
-                 "heartbeats", "billing periods", "notices", "installations"];
+                 "heartbeats", "billing periods", "notices", "installations", "playlists"];
   const failed = names.filter((_, i) => reads[i].error);
   const unitsFailed = !!reads[1].error;
   const noticesFailed = !!reads[6].error;
-  const [orgs, units, labels, runtime, beats, periods, notices, installations] =
+  const [orgs, units, labels, runtime, beats, periods, notices, installations, playlistRows] =
     reads.map(r => r.data);
   if (reads[0].error) { err.textContent = reads[0].error.message; return; }
   if (failed.length) {
@@ -880,6 +1100,16 @@ async function loadFleet(user) {
   (periods || []).forEach(r => { if (!periodOf[r.organization_id]) periodOf[r.organization_id] = r; });
   (notices || []).forEach(r => {
     if (r.state !== "sent") noticeCount[r.organization_id] = (noticeCount[r.organization_id] || 0) + 1;
+  });
+  // Playlists (Step 3 remainder): the scoped read's active
+  // entries, grouped per company in pool order (the read
+  // orders by platform then number). A failed read names
+  // itself in the banner above and leaves the sections at
+  // their zero counts — never another company's entries.
+  Object.keys(playlistOf).forEach(k => delete playlistOf[k]);
+  (playlistRows || []).forEach(r => {
+    (playlistOf[r.organization_id] =
+      playlistOf[r.organization_id] || []).push(r);
   });
   // Usage (Part 4; server-side aggregate since the correction):
   // this month's counted check-ins, one eps.usage_month_checkins
@@ -1101,6 +1331,7 @@ async function loadFleet(user) {
         : (rows
           ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
           : "<div class='note'>No units yet.</div>")) +
+      "<div id='plhost-" + esc(org.id) + "'>" + playlistsHtml(org.id) + "</div>" +
       "</div>";
     host.appendChild(card);
     renderedOrgs.push(org.id);
@@ -1133,6 +1364,10 @@ async function loadFleet(user) {
   host.querySelectorAll("[data-summary]").forEach(btn => {
     btn.addEventListener("click", () => toggleOrg(btn.dataset.summary));
   });
+  // Step 3 wiring: each company's playlist section binds its
+  // own add/remove controls (they rebind on every section
+  // re-render after a mutation).
+  renderedOrgs.forEach(orgId => bindPlaylists(orgId));
   // A query still standing in the search field (the operator
   // typed, then the fleet reloaded) re-applies to the fresh
   // cards — filtering and force-expansion alike.
