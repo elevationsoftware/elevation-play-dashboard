@@ -111,6 +111,19 @@
   }
   .cmd-line { font-size: 12.5px; color: var(--hint); margin-top: 8px; min-height: 15px; }
   .cmd-line.bad { color: #e8a0a0; }
+  /* Fleet depth + critical alerts (Step 7 Part 3): the app
+     version sits small under the unit's name; the playing entry
+     sits small under the PLAYING word; the alerts area is one
+     quiet card that exists only while a condition stands. */
+  .ver { color: var(--hint); font-size: 12px; margin-top: 3px; }
+  .sub-line { color: var(--secondary); font-size: 12.5px; margin-top: 3px; }
+  .alerts {
+    background: var(--surface); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 18px 24px; margin-bottom: 24px;
+    animation: rise 0.6s ease-out both;
+  }
+  .alert-title { color: var(--gold); font-size: 13px; font-weight: 700; letter-spacing: .08em; margin-bottom: 8px; }
+  .alert-line { font-size: 14px; padding: 4px 0; }
   /* The page rises as it loads — one quiet fade-and-lift, then
      stillness. Anthony's pick (October 29, 2026). */
   @keyframes rise {
@@ -168,6 +181,7 @@
         </div>
       </div>
     </div>
+    <div id="alerts" class="alerts" hidden></div>
     <div id="orgs"></div>
     <div id="fleetErr" class="err"></div>
   </div>
@@ -254,6 +268,71 @@ const trackedCmds = {};   // command id -> {unitId, polls, timer}: one tracker p
 const lineShown = {};     // unit id -> {id, seq}: the command the status line currently reflects
 const unitDisabled = {};  // unit id -> bool: operator_disabled as currently rendered
 
+// Fleet depth + critical alerts (Step 7 Part 3) — the viewing
+// half of the dashboard. Since Part 3's migration the phone
+// reports its runtime facts at every check-in (its LOCAL
+// disabled flag, its selected platform, whether it is
+// conducting and which entry, in eps.unit_runtime_state) and
+// the server stamps the unit's last check-in there on every
+// proven check-in — so Platform, Last activity, and a deepened
+// Status render from facts instead of standing empty. The
+// alerts area derives only from what this page can read: a
+// unit silent past the threshold below, a failed latest
+// command, a disable standing from either source, an
+// organization suspended or revoked. It renders only while at
+// least one condition stands.
+const UNIT_SILENCE_MS = 20 * 60 * 1000;  // a unit is silent after 20 minutes without a check-in
+const unitStatusHtml = {};  // unit id -> the status cell's rendered depth (restored when a server disable lifts)
+
+// The runtime table stores its own platform vocabulary
+// ('apple' | 'youtube'); the display names the platform in full.
+function platLabel(stored) {
+  if (stored === "apple") return "APPLE MUSIC";
+  if (stored === "youtube") return "YOUTUBE";
+  return stored ? String(stored).toUpperCase() : "—";
+}
+
+// Last activity: relative first, the clock time second —
+// "6M AGO · 12:41 AM"; a fresh stamp reads "JUST NOW".
+function lastActivityText(rt) {
+  const ts = rt && rt.last_checkin_at;
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "—";
+  const clock = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const diff = Date.now() - d.getTime();
+  if (diff < 90 * 1000) return "JUST NOW · " + clock;
+  if (diff < 60 * 60 * 1000) return Math.max(1, Math.floor(diff / 60000)) + "M AGO · " + clock;
+  if (diff < 24 * 60 * 60 * 1000) return Math.floor(diff / 3600000) + "H AGO · " + clock;
+  return Math.floor(diff / 86400000) + "D AGO · " + clock;
+}
+
+// A silence duration in plain words, for the alert line.
+function durationWords(ms) {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return mins + " MIN";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + (hrs === 1 ? " HOUR" : " HOURS");
+  const days = Math.floor(hrs / 24);
+  return days + (days === 1 ? " DAY" : " DAYS");
+}
+
+// The deepened status: the unit's lifecycle word stands for a
+// unit that is not active; under active, the two disable
+// sources outrank conducting (a disable stops the session), and
+// the LOCAL source is named so the two stay distinguishable —
+// the server flag's word is plain DISABLED, matching the badge
+// and the phone's own "disabled from the dashboard" face.
+function unitStatusOf(u, rt) {
+  if (u.status !== "active") {
+    return { word: String(u.status || "").toUpperCase(), entry: null };
+  }
+  if (u.operator_disabled) return { word: "DISABLED", entry: null };
+  if (rt.local_disabled) return { word: "DISABLED (ON DEVICE)", entry: null };
+  if (rt.conducting) return { word: "PLAYING", entry: rt.current_entry || null };
+  return { word: "READY", entry: null };
+}
+
 function cmdLineText(rec) {
   if (!rec || !rec.type) return "";
   return (CMD_LABEL[rec.type] || rec.type) + " — " +
@@ -293,13 +372,23 @@ function writeCmdLine(unitId, row) {
 
 function applyUnitFlag(unitId, dis) {
   // The DISABLED presentation, mutated on the standing nodes —
-  // the same three facts loadFleet renders (the badge, the
-  // DISABLE/ENABLE swap, and which button is primary) — so the
-  // open page corrects itself with no reload. The swap button's
-  // click handler reads data-cmd at click time, so retargeting
-  // the standing button is the whole change.
+  // the same facts loadFleet renders (the badge, the
+  // DISABLE/ENABLE swap, which button is primary, and — since
+  // Part 3 — the status cell's word) — so the open page
+  // corrects itself with no reload. The swap button's click
+  // handler reads data-cmd at click time, so retargeting the
+  // standing button is the whole change. When the server flag
+  // lifts, the status cell restores the depth loadFleet
+  // rendered for the unit (READY, PLAYING, or the on-device
+  // disable's own wording).
   const badge = document.getElementById("unitbadge-" + unitId);
   if (badge) badge.innerHTML = dis ? "<span class='badge'>DISABLED</span>" : "";
+  const statusCell = document.getElementById("statuscell-" + unitId);
+  if (statusCell) {
+    statusCell.innerHTML = dis
+      ? "DISABLED"
+      : (unitStatusHtml[unitId] || statusCell.innerHTML);
+  }
   const flagBtn = document.getElementById("flagbtn-" + unitId);
   if (flagBtn) {
     flagBtn.dataset.cmd = dis ? "enable_unit" : "disable_unit";
@@ -495,17 +584,18 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, last_checkin_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
+      eps().from("physical_installations").select("system_unit_id, status, app_version_name, app_version_reported_at"),
     ]);
   const names = ["organizations", "units", "labels", "runtime state",
-                 "heartbeats", "billing periods", "notices"];
+                 "heartbeats", "billing periods", "notices", "installations"];
   const failed = names.filter((_, i) => reads[i].error);
   const unitsFailed = !!reads[1].error;
   const noticesFailed = !!reads[6].error;
-  const [orgs, units, labels, runtime, beats, periods, notices] =
+  const [orgs, units, labels, runtime, beats, periods, notices, installations] =
     reads.map(r => r.data);
   if (reads[0].error) { err.textContent = reads[0].error.message; return; }
   if (failed.length) {
@@ -544,10 +634,28 @@ async function loadFleet(user) {
       };
     }
   });
-  const labelOf = {}, runtimeOf = {}, lastBeat = {}, periodOf = {}, noticeCount = {};
+  const labelOf = {}, runtimeOf = {}, periodOf = {}, noticeCount = {};
   (labels || []).forEach(r => { labelOf[r.system_unit_id] = r.label; });
   (runtime || []).forEach(r => { runtimeOf[r.system_unit_id] = r; });
-  (beats || []).forEach(r => { if (!lastBeat[r.system_unit_id]) lastBeat[r.system_unit_id] = r.recorded_at; });
+  // (The heartbeats read above stays in the read set — its
+  // failure is still surfaced by name — but nothing renders
+  // from it since Part 3: the table has never had a writer,
+  // and Last activity now renders the server-stamped
+  // last_checkin_at instead.)
+  // The app version and the silence test read the installations
+  // (Part 3): the version is the one the unit's ACTIVE
+  // installation most recently reported at check-in; a unit
+  // counts as installed — and so can stand silent — only while
+  // an active installation exists.
+  const versionOf = {}, activeInstall = {};
+  (installations || []).forEach(r => {
+    if (r.status !== "active") return;
+    activeInstall[r.system_unit_id] = true;
+    const cur = versionOf[r.system_unit_id];
+    if (!cur || String(r.app_version_reported_at || "") > String(cur.at || "")) {
+      versionOf[r.system_unit_id] = { name: r.app_version_name, at: r.app_version_reported_at };
+    }
+  });
   (periods || []).forEach(r => { if (!periodOf[r.organization_id]) periodOf[r.organization_id] = r; });
   (notices || []).forEach(r => {
     if (r.state !== "sent") noticeCount[r.organization_id] = (noticeCount[r.organization_id] || 0) + 1;
@@ -555,23 +663,39 @@ async function loadFleet(user) {
 
   const host = document.getElementById("orgs");
   host.innerHTML = "";
+  const alertsHost = document.getElementById("alerts");
+  alertsHost.innerHTML = "";
+  alertsHost.hidden = true;
   if (!orgs || orgs.length === 0) {
     host.innerHTML = '<div class="card">This account has no access.' +
       '<div class="note">Access is granted by membership — ask the operator to provision this account.</div></div>';
     return;
   }
+  const alerts = [];
   // Test organizations (designated in the data, S6B) are kept
   // out of the fleet view; the exclusion itself is shown, never
   // silent. Their records stay in the system untouched.
   const testCount = orgs.filter(o => o.is_test).length;
   const fleets = orgs.filter(o => !o.is_test);
   fleets.forEach(org => {
-    const rows = (units || []).filter(u => u.organization_id === org.id).map(u => {
+    // Critical alerts (Part 3), organization level: the billing
+    // states the account-state read already computes.
+    const orgState = stateOf[org.id];
+    if (orgState === "suspended") {
+      alerts.push(esc(org.display_name) + " — BILLING SUSPENDED");
+    }
+    if (orgState === "revoked") {
+      alerts.push(esc(org.display_name) + " — ACCESS REVOKED");
+    }
+    const orgUnits = (units || []).filter(u => u.organization_id === org.id);
+    const rows = orgUnits.map(u => {
       const rt = runtimeOf[u.id] || {};
-      // The unit's recorded platform ('apple' | 'youtube')
-      // seeds the START override, in the payload's own
-      // vocabulary ('apple_music' | 'youtube').
-      const plat = rt.current_platform === "youtube" ? "youtube" : "apple_music";
+      // The unit's platform seeds the START override, in the
+      // payload's own vocabulary ('apple_music' | 'youtube'):
+      // the phone's REPORTED platform first (Part 3), the
+      // recorded platform behind it.
+      const seedPlatform = rt.reported_platform || rt.current_platform;
+      const plat = seedPlatform === "youtube" ? "youtube" : "apple_music";
       unitPlatform[u.id] = plat;
       const dis = !!u.operator_disabled;
       unitDisabled[u.id] = dis;
@@ -579,12 +703,47 @@ async function loadFleet(user) {
       if (latestCmd[u.id]) {
         lineShown[u.id] = { id: latestCmd[u.id].id, seq: latestCmd[u.id].seq };
       }
+      const st = unitStatusOf(u, rt);
+      const statusHtml = esc(st.word) +
+        (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "");
+      unitStatusHtml[u.id] = statusHtml;
+      const ver = versionOf[u.id];
+      // Critical alerts (Part 3), unit level — each line names
+      // the company and the unit and states the condition in
+      // plain words.
+      const unitName = esc(org.display_name) + " · " +
+        esc(labelOf[u.id] || u.unit_key);
+      if ((orgState === "active" || orgState === "owner" ||
+           orgState === "past_due") && activeInstall[u.id]) {
+        if (!rt.last_checkin_at) {
+          alerts.push(unitName + " — HAS NOT CHECKED IN (NO RECORD)");
+        } else {
+          const silentFor = Date.now() - Date.parse(rt.last_checkin_at);
+          if (silentFor > UNIT_SILENCE_MS) {
+            alerts.push(unitName + " — NO CHECK-IN FOR " +
+              durationWords(silentFor));
+          }
+        }
+      }
+      const latest = latestCmd[u.id];
+      if (latest && latest.state === "failed") {
+        alerts.push(unitName + " — " +
+          (CMD_LABEL[latest.type] || String(latest.type).toUpperCase()) +
+          " COMMAND FAILED" +
+          (latest.code ? " · " + esc(latest.code) : ""));
+      }
+      if (dis) {
+        alerts.push(unitName + " — DISABLED FROM THE DASHBOARD");
+      } else if (rt.local_disabled) {
+        alerts.push(unitName + " — DISABLED ON THE DEVICE");
+      }
       return "<tr><td>" + esc(labelOf[u.id] || u.unit_key) +
         "<span id='unitbadge-" + esc(u.id) + "'>" +
-          (dis ? "<span class='badge'>DISABLED</span>" : "") + "</span></td>" +
-        "<td>" + esc(u.status) + "</td>" +
-        "<td class='dim'>" + esc(rt.current_platform || "—") + "</td>" +
-        "<td class='dim'>" + when(lastBeat[u.id] || rt.updated_at) + "</td></tr>" +
+          (dis ? "<span class='badge'>DISABLED</span>" : "") + "</span>" +
+          (ver && ver.name ? "<div class='ver'>v" + esc(ver.name) + "</div>" : "") + "</td>" +
+        "<td id='statuscell-" + esc(u.id) + "'>" + statusHtml + "</td>" +
+        "<td class='dim'>" + esc(platLabel(rt.reported_platform || rt.current_platform)) + "</td>" +
+        "<td class='dim'>" + esc(lastActivityText(rt)) + "</td></tr>" +
         "<tr class='ctl-row'><td colspan='4'><div class='ctl'>" +
         "<span class='seg' data-seg='" + esc(u.id) + "'>" +
           "<button type='button' data-plat='apple_music'" +
@@ -635,6 +794,12 @@ async function loadFleet(user) {
           : "<div class='note'>No units yet.</div>"));
     host.appendChild(card);
   });
+  // The alerts area exists only while a condition stands.
+  if (alerts.length) {
+    alertsHost.innerHTML = "<div class='alert-title'>ALERTS</div>" +
+      alerts.map(a => "<div class='alert-line'>" + a + "</div>").join("");
+    alertsHost.hidden = false;
+  }
   // Control wiring: command buttons send; the segmented
   // control only chooses the platform the next START carries.
   host.querySelectorAll("[data-cmd]").forEach(btn => {
