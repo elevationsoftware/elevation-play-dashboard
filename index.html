@@ -18,8 +18,16 @@
   /* Anthony's rule (October 28, 2026): content starts low, with a
      real gap below the top of the screen — never jammed to the edge. */
   .page { max-width: 920px; margin: 0 auto; padding: 72px 24px 64px; }
-  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; }
-  .sub { color: var(--secondary); font-size: 14px; margin-bottom: 22px; }
+  /* The brand mark (Step 7 Part 4): the approved gold rook
+     replaces the two-line text header outright. Its height
+     matches the block it replaces, measured from that block's
+     CSS — the 26px title line (~31px at normal line height),
+     the 6px gap, and the 14px subtitle line (~17px) = 54px —
+     and it keeps the subtitle's 22px margin below, so the page
+     rhythm is unchanged. The image is a 256px downscale of the
+     approved transparent PNG, embedded as a data URI so the
+     dashboard stays one published file. */
+  .brand { display: block; height: 54px; width: auto; margin-bottom: 22px; }
   .card {
     background: var(--surface); border: 1px solid var(--outline);
     border-radius: 10px; padding: 24px; margin-bottom: 24px;
@@ -60,7 +68,6 @@
   .wizard-close:hover { color: var(--gold); }
   .wizard-card { position: relative; background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; max-width: 340px; width: 100%; padding: 30px 26px; text-align: center; animation: rise .45s ease-out; }
   .wizard-card p { font-size: 17px; line-height: 1.55; color: var(--text); }
-  h2 { font-size: 19px; margin: 0 0 4px; }
   .orgkind { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th { text-align: left; color: var(--hint); font-weight: 500; padding: 8px 10px 8px 0; }
@@ -124,15 +131,57 @@
   }
   .alert-title { color: var(--gold); font-size: 13px; font-weight: 700; letter-spacing: .08em; margin-bottom: 8px; }
   .alert-line { font-size: 14px; padding: 4px 0; }
+  /* Step 7 Part 4 — the finishing pieces.
+     Queue reset: the quiet sibling on the controls row — same
+     34px / 7px rounding as every control, but in the secondary
+     voice; its confirming state takes the gold edge so the
+     second press is a deliberate one. */
+  .ctl-btn.quiet { color: var(--secondary); border-color: var(--outline); }
+  .ctl-btn.quiet.confirming { color: var(--gold); border-color: var(--gold); }
+  /* Growth layout: each company is ONE summary line that
+     expands to its full card. The summary is a real button
+     (keyboard and tap alike) with the global button styling
+     fully reset — it reads as the card's own header line. */
+  .org-summary {
+    display: flex; align-items: baseline; width: 100%;
+    margin: 0; padding: 0; background: none; border: 0;
+    color: var(--text); font-family: inherit; text-align: left;
+    cursor: pointer;
+  }
+  .org-name { font-size: 19px; font-weight: 700; }
+  .org-counts { color: var(--hint); font-size: 13px; margin-left: 12px; letter-spacing: .03em; }
+  .chev { color: var(--gold); margin-left: auto; font-size: 15px; padding-left: 12px; }
+  .org-body { margin-top: 4px; }
+  .org-body[hidden] { display: none; }
+  .fleet-search { margin-bottom: 18px; }
+  /* Usage: the company's own check-in count against its
+     allotment — a quiet line and a thin gold bar. */
+  .usage { margin-bottom: 14px; }
+  .usage-line { font-size: 12.5px; color: var(--secondary); letter-spacing: .04em; }
+  .usage-bar { height: 4px; background: #2c2f36; border-radius: 2px; margin-top: 6px; }
+  .usage-fill { height: 100%; background: var(--gold); border-radius: 2px; }
+  /* Phone grid tidy (Anthony's decision, November 4, 2026):
+     at phone width the controls stop wrapping unevenly and
+     take an even two-column grid — the platform switch spans
+     the full row, START/STOP share the next, RESTART and
+     DISABLE/ENABLE the next, RESET QUEUE spans beneath — so
+     the right edge lines up. Desktop layout is untouched. */
+  @media (max-width: 640px) {
+    .ctl { display: grid; grid-template-columns: 1fr 1fr; }
+    .ctl .seg { grid-column: 1 / -1; display: flex; }
+    .ctl .seg button { flex: 1; }
+    .ctl-btn { width: 100%; }
+    .ctl-btn.reset { grid-column: 1 / -1; }
+  }
   /* The page rises as it loads — one quiet fade-and-lift, then
      stillness. Anthony's pick (October 29, 2026). */
   @keyframes rise {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  h1, .sub, .bar, .card { animation: rise 0.6s ease-out both; }
+  .brand, .bar, .card { animation: rise 0.6s ease-out both; }
   @media (prefers-reduced-motion: reduce) {
-    h1, .sub, .bar, .card { animation: none; }
+    .brand, .bar, .card { animation: none; }
   }
   /* Gold Rush (named by Anthony): a brief gold rain, on demand only — the
      button at the bottom of the signed-in view, named by Anthony
@@ -153,8 +202,7 @@
 </head>
 <body>
 <div class="page">
-  <h1>Elevation Software</h1>
-  <div class="sub">EPS Dashboard</div>
+  <img class="brand" alt="Elevation Software" src="data:image/png;base64,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">
 
   <div id="signin" class="card" hidden>
     <label for="email" id="emailLabel">Email</label>
@@ -182,7 +230,9 @@
       </div>
     </div>
     <div id="alerts" class="alerts" hidden></div>
+    <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
     <div id="orgs"></div>
+    <div id="noMatch" class="note" hidden>No companies or units match.</div>
     <div id="fleetErr" class="err"></div>
   </div>
 </div>
@@ -283,6 +333,51 @@ const unitDisabled = {};  // unit id -> bool: operator_disabled as currently ren
 // least one condition stands.
 const UNIT_SILENCE_MS = 20 * 60 * 1000;  // a unit is silent after 20 minutes without a check-in
 const unitStatusHtml = {};  // unit id -> the status cell's rendered depth (restored when a server disable lifts)
+
+// Step 7 Part 4 — the finishing pieces.
+//
+// Queue reset: the operator can take back a unit's undelivered
+// commands from the dashboard. It rides the SAME boundary as
+// the enqueue (eps-unit-command, action "reset_queue") to the
+// definer eps.reset_unit_command_queue, which expires the
+// unit's PENDING commands only and answers how many it moved.
+// A reset carries no idempotency key: the operation is defined
+// entirely by the standing state it acts on, so repeating it
+// moves nothing and answers 0 — idempotency is intrinsic. The
+// control confirms INLINE (the button itself asks CONFIRM
+// RESET? for a few seconds) — this page has no modal dialogs.
+//
+// Growth layout + search: each company renders as ONE summary
+// line (name, unit count, how many in each standing state, an
+// alert count when any stand) that expands to the full card.
+// The default is the calm one: a company stands EXPANDED only
+// when it has an alert or a unit playing — everything else
+// opens collapsed and the counts do the talking, so the page
+// opens quiet and what needs eyes is already open. The search
+// field filters companies and units by name as you type; a
+// unit match force-expands its company while the query stands,
+// without overwriting the operator's own expansion choices.
+//
+// Usage: the metered resource is Edge Function invocations;
+// per-company usage is counted from EPS's own records — one
+// count per proven check-in, accumulated per organization per
+// day in eps.usage_daily. The month's figure is summed
+// SERVER-SIDE by eps.usage_month_checkins (the Part 4
+// correction): exact at any table size, never a client-side
+// sum over a capped row read. The line therefore reads
+// CHECK-INS: the per-organization proxy EPS counts, never
+// Supabase's project total. The allotment is Anthony's settled model:
+// 200,000 a month on the Free plan, 1,000,000 on Pro. The
+// current plan state is named in ONE place — flipping to Pro
+// changes USAGE_ALLOTMENT and nothing else. Display only: no
+// billing math lives here.
+const FREE_ALLOTMENT = 200000;
+const PRO_ALLOTMENT = 1000000;
+const USAGE_ALLOTMENT = FREE_ALLOTMENT;
+const orgExpanded = {};    // org id -> bool: the operator's (or the default's) expansion choice
+const searchForce = new Set();  // org ids a unit-match in the search holds open while the query stands
+const resetTimers = {};    // unit id -> the confirm state's revert timer
+let renderedOrgs = [];     // org ids rendered by the latest loadFleet, in display order
 
 // The runtime table stores its own platform vocabulary
 // ('apple' | 'youtube'); the display names the platform in full.
@@ -546,6 +641,115 @@ async function sendCommand(btn) {
   }
 }
 
+// The queue reset (Part 4): a two-press control. The first
+// press arms it — the button itself becomes CONFIRM RESET? for
+// a few seconds, then quietly reverts; the second press sends.
+// The result lands on the unit's own status line, where the
+// command lines already live.
+async function resetQueue(btn) {
+  const unitId = btn.dataset.reset;
+  if (!actorId) {
+    setCmdLine(unitId, "SIGN-IN EXPIRED — RELOAD THE PAGE", true);
+    return;
+  }
+  if (btn.dataset.confirming !== "1") {
+    btn.dataset.confirming = "1";
+    btn.textContent = "CONFIRM RESET?";
+    btn.classList.add("confirming");
+    clearTimeout(resetTimers[unitId]);
+    resetTimers[unitId] = setTimeout(() => {
+      btn.dataset.confirming = "";
+      btn.textContent = "RESET QUEUE";
+      btn.classList.remove("confirming");
+    }, 4000);
+    return;
+  }
+  clearTimeout(resetTimers[unitId]);
+  btn.dataset.confirming = "";
+  btn.classList.remove("confirming");
+  btn.disabled = true;
+  try {
+    const { data, error } = await client.functions.invoke("eps-unit-command", {
+      body: { action: "reset_queue", system_unit_id: unitId },
+    });
+    if (error) {
+      // The boundary's coded refusal, read exactly as
+      // sendCommand reads it; raw error detail is never shown.
+      let code = "";
+      try {
+        const respBody = error.context
+          ? await error.context.json() : null;
+        if (respBody && typeof respBody.code === "string") {
+          code = respBody.code;
+        }
+      } catch (e) { /* no coded body — the generic line stands */ }
+      if (code === "P0523") {
+        setCmdLine(unitId, "NOT PERMITTED FOR THIS ACCOUNT", true);
+      } else {
+        setCmdLine(unitId, "COULD NOT RESET — PLEASE TRY AGAIN", true);
+      }
+      return;
+    }
+    const n = data && typeof data.expired_count === "number"
+      ? data.expired_count : 0;
+    setCmdLine(unitId, n > 0
+      ? "QUEUE RESET · " + n + " CLEARED"
+      : "QUEUE ALREADY EMPTY", false);
+  } catch (e) {
+    setCmdLine(unitId, "COULD NOT RESET — PLEASE TRY AGAIN", true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "RESET QUEUE";
+  }
+}
+
+// Summary-card expansion (Part 4): the body shows when the
+// operator's choice OR a standing search force says so; the
+// chevron and aria state follow the same answer.
+function applyOrgExpansion(orgId) {
+  const expanded = !!orgExpanded[orgId] || searchForce.has(orgId);
+  const body = document.getElementById("orgbody-" + orgId);
+  if (body) body.hidden = !expanded;
+  const btn = document.querySelector("[data-summary='" + orgId + "']");
+  if (btn) btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  const chev = document.getElementById("chev-" + orgId);
+  if (chev) chev.textContent = expanded ? "▾" : "▸";
+}
+
+function toggleOrg(orgId) {
+  const nowExpanded = !!orgExpanded[orgId] || searchForce.has(orgId);
+  orgExpanded[orgId] = !nowExpanded;
+  if (nowExpanded) searchForce.delete(orgId);
+  applyOrgExpansion(orgId);
+}
+
+// Search (Part 4): filter as you type. A card carries its
+// search text (company name + every unit's label and key) in
+// data-search and its company name alone in data-name: a name
+// match filters, and a UNIT match additionally holds its
+// company open while the query stands. Clearing the query
+// restores every card and the operator's own expansion states.
+function applySearch() {
+  const input = document.getElementById("fleetSearch");
+  const q = (input.value || "").trim().toLowerCase();
+  searchForce.clear();
+  let total = 0, visible = 0;
+  document.querySelectorAll("[data-search]").forEach(card => {
+    total++;
+    const matches = q === "" || card.dataset.search.includes(q);
+    card.hidden = !matches;
+    if (matches) {
+      visible++;
+      if (q !== "" && !(card.dataset.name || "").includes(q)) {
+        searchForce.add(card.dataset.org);
+      }
+    }
+  });
+  renderedOrgs.forEach(applyOrgExpansion);
+  const noMatch = document.getElementById("noMatch");
+  if (noMatch) noMatch.hidden = !(q !== "" && total > 0 && visible === 0);
+}
+
 function moneyRain() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const layer = document.createElement("div");
@@ -568,6 +772,23 @@ function moneyRain() {
   }
   document.body.appendChild(layer);
   setTimeout(() => layer.remove(), 4200);
+}
+
+// The CURRENT UTC MONTH's bounds, passed to the server-side
+// usage aggregate. usage_daily buckets are UTC days, so the
+// month the line names is the buckets' own month: the range
+// is [first day of this UTC month, first day of the next),
+// computed in UTC — never the browser's local month edge,
+// which could sit a day either side of the buckets it sums.
+function usageMonthBounds() {
+  const d = new Date();
+  const isoDay = t => t.toISOString().slice(0, 10);
+  return {
+    start: isoDay(new Date(Date.UTC(
+      d.getUTCFullYear(), d.getUTCMonth(), 1))),
+    end: isoDay(new Date(Date.UTC(
+      d.getUTCFullYear(), d.getUTCMonth() + 1, 1))),
+  };
 }
 
 async function loadFleet(user) {
@@ -660,9 +881,27 @@ async function loadFleet(user) {
   (notices || []).forEach(r => {
     if (r.state !== "sent") noticeCount[r.organization_id] = (noticeCount[r.organization_id] || 0) + 1;
   });
+  // Usage (Part 4; server-side aggregate since the correction):
+  // this month's counted check-ins, one eps.usage_month_checkins
+  // call per company over the current UTC month's bounds. The
+  // total comes back exact from the server; a failed call leaves
+  // the company null and its line renders UNKNOWN below — never
+  // a fabricated figure.
+  const usageOf = {};
+  const monthBounds = usageMonthBounds();
+  await Promise.all((orgs || []).map(async org => {
+    const { data, error } = await eps().rpc(
+      "usage_month_checkins", {
+        p_organization_id: org.id,
+        p_month_start: monthBounds.start,
+        p_month_end: monthBounds.end,
+      });
+    usageOf[org.id] = error ? null : Number(data);
+  }));
 
   const host = document.getElementById("orgs");
   host.innerHTML = "";
+  renderedOrgs = [];
   const alertsHost = document.getElementById("alerts");
   alertsHost.innerHTML = "";
   alertsHost.hidden = true;
@@ -679,15 +918,21 @@ async function loadFleet(user) {
   const fleets = orgs.filter(o => !o.is_test);
   fleets.forEach(org => {
     // Critical alerts (Part 3), organization level: the billing
-    // states the account-state read already computes.
+    // states the account-state read already computes. Part 4
+    // counts each company's alerts as they are collected — the
+    // count rides the company's summary line.
+    let orgAlerts = 0;
+    const pushAlert = line => { alerts.push(line); orgAlerts++; };
     const orgState = stateOf[org.id];
     if (orgState === "suspended") {
-      alerts.push(esc(org.display_name) + " — BILLING SUSPENDED");
+      pushAlert(esc(org.display_name) + " — BILLING SUSPENDED");
     }
     if (orgState === "revoked") {
-      alerts.push(esc(org.display_name) + " — ACCESS REVOKED");
+      pushAlert(esc(org.display_name) + " — ACCESS REVOKED");
     }
     const orgUnits = (units || []).filter(u => u.organization_id === org.id);
+    const statusWords = [];  // each unit's standing word, for the summary counts
+    const unitSearch = [];   // each unit's label and key, for the search text
     const rows = orgUnits.map(u => {
       const rt = runtimeOf[u.id] || {};
       // The unit's platform seeds the START override, in the
@@ -704,6 +949,8 @@ async function loadFleet(user) {
         lineShown[u.id] = { id: latestCmd[u.id].id, seq: latestCmd[u.id].seq };
       }
       const st = unitStatusOf(u, rt);
+      statusWords.push(st.word);
+      unitSearch.push(labelOf[u.id] || u.unit_key, u.unit_key);
       const statusHtml = esc(st.word) +
         (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "");
       unitStatusHtml[u.id] = statusHtml;
@@ -716,26 +963,26 @@ async function loadFleet(user) {
       if ((orgState === "active" || orgState === "owner" ||
            orgState === "past_due") && activeInstall[u.id]) {
         if (!rt.last_checkin_at) {
-          alerts.push(unitName + " — HAS NOT CHECKED IN (NO RECORD)");
+          pushAlert(unitName + " — HAS NOT CHECKED IN (NO RECORD)");
         } else {
           const silentFor = Date.now() - Date.parse(rt.last_checkin_at);
           if (silentFor > UNIT_SILENCE_MS) {
-            alerts.push(unitName + " — NO CHECK-IN FOR " +
+            pushAlert(unitName + " — NO CHECK-IN FOR " +
               durationWords(silentFor));
           }
         }
       }
       const latest = latestCmd[u.id];
       if (latest && latest.state === "failed") {
-        alerts.push(unitName + " — " +
+        pushAlert(unitName + " — " +
           (CMD_LABEL[latest.type] || String(latest.type).toUpperCase()) +
           " COMMAND FAILED" +
           (latest.code ? " · " + esc(latest.code) : ""));
       }
       if (dis) {
-        alerts.push(unitName + " — DISABLED FROM THE DASHBOARD");
+        pushAlert(unitName + " — DISABLED FROM THE DASHBOARD");
       } else if (rt.local_disabled) {
-        alerts.push(unitName + " — DISABLED ON THE DEVICE");
+        pushAlert(unitName + " — DISABLED ON THE DEVICE");
       }
       return "<tr><td>" + esc(labelOf[u.id] || u.unit_key) +
         "<span id='unitbadge-" + esc(u.id) + "'>" +
@@ -765,6 +1012,8 @@ async function loadFleet(user) {
           : "<button type='button' class='ctl-btn' id='flagbtn-" + esc(u.id) +
               "' data-cmd='disable_unit' data-unit='" +
               esc(u.id) + "'>DISABLE UNIT</button>") +
+        "<button type='button' class='ctl-btn quiet reset' id='resetbtn-" +
+          esc(u.id) + "' data-reset='" + esc(u.id) + "'>RESET QUEUE</button>" +
         "</div><div class='cmd-line' id='cmd-" + esc(u.id) + "'>" +
           esc(cmdLineText(cmd)) + "</div></td></tr>";
     }).join("");
@@ -777,22 +1026,84 @@ async function loadFleet(user) {
     const accountState = stateOf[org.id] === "owner"
       ? "owner authority"
       : (stateOf[org.id] || "unknown");
+    // The summary line's counts (Part 4): the unit count, then
+    // the standing states in the order an operator scans them —
+    // playing, ready, disabled (both disable words count as
+    // DISABLED) — then any other lifecycle word in the order
+    // met, then the alert count when any stand.
+    const stateCounts = {};
+    statusWords.forEach(w => {
+      const key = w.indexOf("DISABLED") === 0 ? "DISABLED" : w;
+      stateCounts[key] = (stateCounts[key] || 0) + 1;
+    });
+    const countParts = [orgUnits.length +
+      (orgUnits.length === 1 ? " UNIT" : " UNITS")];
+    ["PLAYING", "READY", "DISABLED"].forEach(k => {
+      if (stateCounts[k]) countParts.push(stateCounts[k] + " " + k);
+    });
+    Object.keys(stateCounts).forEach(k => {
+      if (k !== "PLAYING" && k !== "READY" && k !== "DISABLED") {
+        countParts.push(stateCounts[k] + " " + k);
+      }
+    });
+    if (orgAlerts > 0) {
+      countParts.push(orgAlerts + (orgAlerts === 1 ? " ALERT" : " ALERTS"));
+    }
+    // The calm default (Part 4): a company stands expanded only
+    // with an alert standing or a unit playing. An operator's
+    // own choice, once made, stands across fleet reloads.
+    if (!(org.id in orgExpanded)) {
+      orgExpanded[org.id] = orgAlerts > 0 || !!stateCounts["PLAYING"];
+    }
+    const expanded = !!orgExpanded[org.id] || searchForce.has(org.id);
+    // The usage line (Part 4): this month's counted check-ins
+    // against the allotment, with the thin gold bar under it. A
+    // failed usage call renders UNKNOWN — never a figure.
+    let usageHtml;
+    if (usageOf[org.id] == null) {
+      usageHtml = "<div class='usage'><div class='usage-line'>" +
+        "USAGE — UNKNOWN</div></div>";
+    } else {
+      const used = usageOf[org.id];
+      const pct = Math.min(100, (100 * used) / USAGE_ALLOTMENT);
+      usageHtml = "<div class='usage'><div class='usage-line'>USAGE — " +
+        used.toLocaleString("en-US") + " / " +
+        USAGE_ALLOTMENT.toLocaleString("en-US") +
+        " CHECK-INS THIS MONTH</div>" +
+        "<div class='usage-bar'><div class='usage-fill' style='width:" +
+        pct + "%'></div></div></div>";
+    }
     const card = document.createElement("div");
     card.className = "card";
+    card.dataset.org = org.id;
+    card.dataset.name = String(org.display_name || "").toLowerCase();
+    card.dataset.search = (String(org.display_name || "") + " " +
+      unitSearch.join(" ")).toLowerCase();
     card.innerHTML =
-      "<h2>" + esc(org.display_name) + "</h2>" +
+      "<button type='button' class='org-summary' data-summary='" +
+        esc(org.id) + "' aria-expanded='" + (expanded ? "true" : "false") + "'>" +
+        "<span class='org-name'>" + esc(org.display_name) + "</span>" +
+        "<span class='org-counts'>" + esc(countParts.join(" · ")) + "</span>" +
+        "<span class='chev' id='chev-" + esc(org.id) + "'>" +
+          (expanded ? "▾" : "▸") + "</span>" +
+      "</button>" +
+      "<div class='org-body' id='orgbody-" + esc(org.id) + "'" +
+        (expanded ? "" : " hidden") + ">" +
       "<div class='orgkind'>" + (org.is_root_authority ? "Owner" : "Client") +
         " · Account: " + esc(accountState) +
         " · Billing: " + billing +
         (noticesFailed ? " · Unsent notices: unknown"
           : (noticeCount[org.id] ? " · Unsent notices: " + noticeCount[org.id] : "")) +
       "</div>" +
+      usageHtml +
       (unitsFailed
         ? "<div class='note'>Units unavailable — the units read failed.</div>"
         : (rows
           ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
-          : "<div class='note'>No units yet.</div>"));
+          : "<div class='note'>No units yet.</div>")) +
+      "</div>";
     host.appendChild(card);
+    renderedOrgs.push(org.id);
   });
   // The alerts area exists only while a condition stands.
   if (alerts.length) {
@@ -814,6 +1125,18 @@ async function loadFleet(user) {
       });
     });
   });
+  // Part 4 wiring: the quiet reset control and the summary
+  // lines' expand/collapse.
+  host.querySelectorAll("[data-reset]").forEach(btn => {
+    btn.addEventListener("click", () => resetQueue(btn));
+  });
+  host.querySelectorAll("[data-summary]").forEach(btn => {
+    btn.addEventListener("click", () => toggleOrg(btn.dataset.summary));
+  });
+  // A query still standing in the search field (the operator
+  // typed, then the fleet reloaded) re-applies to the fresh
+  // cards — filtering and force-expansion alike.
+  applySearch();
   // Test organizations stay excluded from the display, silently —
   // at Anthony's direction (October 29, 2026) the "not shown" line
   // itself was removed from the page. The count is still computed
@@ -1059,6 +1382,10 @@ document.getElementById("signoutBtn").addEventListener("click", async () => {
   await client.auth.signOut();
   location.reload();
 });
+
+// Search (Step 7 Part 4): filter companies and units by name
+// as you type.
+document.getElementById("fleetSearch").addEventListener("input", applySearch);
 boot();
 </script>
 </body>
