@@ -154,6 +154,14 @@
   .org-body { margin-top: 4px; }
   .org-body[hidden] { display: none; }
   .fleet-search { margin-bottom: 18px; }
+  /* Playlist Management page (the refinement): the second
+     view's heading, in the section voice the page already
+     uses — bold, letterspaced caps, like the alert title and
+     the playlist platform labels, one size up. The company
+     boxes on that page reuse the fleet cards' summary/body
+     styles (.org-summary, .org-name, .org-counts, .chev,
+     .org-body) outright. */
+  .view-head { font-size: 15px; font-weight: 700; letter-spacing: .08em; margin-bottom: 18px; }
   /* Usage: the company's own check-in count against its
      allotment — a quiet line and a thin gold bar. */
   .usage { margin-bottom: 14px; }
@@ -173,8 +181,9 @@
     .ctl-btn { width: 100%; }
     .ctl-btn.reset { grid-column: 1 / -1; }
   }
-  /* Playlists (Step 3 remainder): the company's pool, inside
-     its expanded card under the units — one quiet section.
+  /* Playlists (Step 3 remainder; moved to the Playlist
+     Management page by the refinement — see the script): one
+     quiet section inside the company's box on that page.
      Entries are plain lines (number — name) with a small
      REMOVE at the same ~20% rounding rule (26px tall, 5px
      radius); the add forms are single rows of fields with an
@@ -237,6 +246,8 @@
       <div class="menu-wrap">
         <button id="menuBtn" class="menu-btn" aria-label="Menu">&#9776;<span id="wizardDot" class="wizard-dot" hidden></span></button>
         <div id="menuPanel" class="menu-panel" hidden>
+          <button id="fleetNavBtn" class="menu-item">Fleet</button>
+          <button id="playlistNavBtn" class="menu-item">Playlist Management</button>
           <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
           <button id="rainBtn" class="menu-item">Gold Rush</button>
           <button id="downloadBtn" class="menu-item">Download the app</button>
@@ -244,10 +255,16 @@
         </div>
       </div>
     </div>
-    <div id="alerts" class="alerts" hidden></div>
-    <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
-    <div id="orgs"></div>
-    <div id="noMatch" class="note" hidden>No companies or units match.</div>
+    <div id="fleetView">
+      <div id="alerts" class="alerts" hidden></div>
+      <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
+      <div id="orgs"></div>
+      <div id="noMatch" class="note" hidden>No companies or units match.</div>
+    </div>
+    <div id="playlistView" hidden>
+      <div class="view-head">PLAYLIST MANAGEMENT</div>
+      <div id="plorgs"></div>
+    </div>
     <div id="fleetErr" class="err"></div>
   </div>
 </div>
@@ -394,8 +411,69 @@ const searchForce = new Set();  // org ids a unit-match in the search holds open
 const resetTimers = {};    // unit id -> the confirm state's revert timer
 let renderedOrgs = [];     // org ids rendered by the latest loadFleet, in display order
 
+// The Playlist Management page (the refinement, Anthony's
+// direction, November 4, 2026): the playlists are management,
+// not fleet monitoring, so they live on their own view — the
+// fleet view is units only, and the operator opens the
+// playlists only to add or remove one. Two views in the one
+// page; the top-right menu carries both (FLEET / PLAYLIST
+// MANAGEMENT above THE WIZARD); the header and menu are
+// shared, the fleet search belongs to the fleet view alone.
+// The standing view persists across reloads (default FLEET) —
+// the same device-memory courtesy as THE WIZARD's seen mark.
+// The playlist page's company boxes collapse by DEFAULT for
+// every company (management is occasional, and the Elevation
+// box holds the whole pool), and their toggles persist under
+// their OWN key, separate from the fleet cards' choices.
+let currentView = "fleet";  // 'fleet' | 'playlists'
+const plOrgExpanded = {};   // org id -> bool: the playlist boxes' expansion choices
+try {
+  const savedPl = JSON.parse(localStorage.getItem("epsPlOrgExpanded") || "{}");
+  if (savedPl && typeof savedPl === "object") {
+    Object.keys(savedPl).forEach(k => { plOrgExpanded[k] = !!savedPl[k]; });
+  }
+} catch (e) {}
+
+function applyView() {
+  const fleetView = document.getElementById("fleetView");
+  const playlistView = document.getElementById("playlistView");
+  if (fleetView) fleetView.hidden = currentView !== "fleet";
+  if (playlistView) playlistView.hidden = currentView !== "playlists";
+}
+
+function setView(name) {
+  currentView = name === "playlists" ? "playlists" : "fleet";
+  try { localStorage.setItem("epsDashView", currentView); } catch (e) {}
+  applyView();
+}
+
+// Playlist-box expansion (the refinement): the fleet summary
+// machinery's sibling — same presentation answer, its own
+// state, no search force on this page.
+function applyPlOrgExpansion(orgId) {
+  const expanded = !!plOrgExpanded[orgId];
+  const body = document.getElementById("plorgbody-" + orgId);
+  if (body) body.hidden = !expanded;
+  const btn = document.querySelector("[data-plsummary='" + orgId + "']");
+  if (btn) btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  const chev = document.getElementById("plchev-" + orgId);
+  if (chev) chev.textContent = expanded ? "▾" : "▸";
+}
+
+function togglePlOrg(orgId) {
+  plOrgExpanded[orgId] = !plOrgExpanded[orgId];
+  try {
+    localStorage.setItem("epsPlOrgExpanded",
+      JSON.stringify(plOrgExpanded));
+  } catch (e) {}
+  applyPlOrgExpansion(orgId);
+}
+
 // Playlists (Step 3 remainder) — the production catalog's
-// operator surface. The catalog lives in the back end
+// operator surface. Since the refinement it renders on the
+// Playlist Management page (see the view machinery above):
+// one collapsible box per company, the fleet cards carry no
+// playlist markup at all. The catalog lives in the back end
 // (eps.playlist_entries); this section renders each company's
 // ACTIVE entries from the account's scoped table read, and
 // its two writes are the catalog definers over the Data API
@@ -432,6 +510,15 @@ function playlistErrorLine(code) {
   return "COULD NOT SAVE — PLEASE TRY AGAIN";
 }
 
+// The per-platform counts line, shared by the section's own
+// heading and its box's summary line on the playlist page.
+function plCountsText(orgId) {
+  const entries = playlistOf[orgId] || [];
+  const apple = entries.filter(e => e.platform === "apple_music").length;
+  const yt = entries.filter(e => e.platform === "youtube").length;
+  return apple + " APPLE · " + yt + " YOUTUBE";
+}
+
 function playlistsHtml(orgId) {
   const entries = playlistOf[orgId] || [];
   const apple = entries.filter(e => e.platform === "apple_music");
@@ -443,7 +530,7 @@ function playlistsHtml(orgId) {
     esc(e.id) + "' data-org='" + esc(orgId) + "'>REMOVE</button></div>"
   ).join("");
   return "<div class='pl'><div class='pl-head'>PLAYLISTS — " +
-    apple.length + " APPLE · " + yt.length + " YOUTUBE</div>" +
+    plCountsText(orgId) + "</div>" +
     "<div class='pl-plat'>APPLE MUSIC</div>" + lines(apple) +
     "<div class='pl-form'>" +
     "<input id='pl-apple-link-" + esc(orgId) + "' type='text' " +
@@ -464,9 +551,10 @@ function playlistsHtml(orgId) {
 }
 
 // (Re)bind one company's playlist section: its buttons are
-// rebuilt with the section, so binding is per render.
+// rebuilt with the section, so binding is per render. The
+// section lives in the company's box on the playlist page.
 function bindPlaylists(orgId) {
-  const body = document.getElementById("orgbody-" + orgId);
+  const body = document.getElementById("plsec-" + orgId);
   if (!body) return;
   body.querySelectorAll("[data-pladd]").forEach(btn => {
     btn.addEventListener("click", () => addPlaylist(btn));
@@ -477,10 +565,14 @@ function bindPlaylists(orgId) {
 }
 
 function renderPlaylists(orgId) {
-  const hostEl = document.getElementById("plhost-" + orgId);
+  const hostEl = document.getElementById("plsec-" + orgId);
   if (!hostEl) return;
   hostEl.innerHTML = playlistsHtml(orgId);
   bindPlaylists(orgId);
+  // The box's summary line carries the same counts; a mutation
+  // moves them with the section it summarizes.
+  const counts = document.getElementById("plcounts-" + orgId);
+  if (counts) counts.textContent = plCountsText(orgId);
 }
 
 // Re-read one company's active entries and re-render its
@@ -1012,6 +1104,15 @@ function usageMonthBounds() {
 
 async function loadFleet(user) {
   hide("signin"); show("fleet");
+  // The standing view (the refinement): a reload returns to
+  // the page the operator left open; a fresh device starts on
+  // the fleet.
+  try {
+    currentView =
+      localStorage.getItem("epsDashView") === "playlists"
+        ? "playlists" : "fleet";
+  } catch (e) { currentView = "fleet"; }
+  applyView();
   actorId = user.id;
   document.getElementById("who").textContent =
     (user.user_metadata && user.user_metadata.display_name) || user.email;
@@ -1104,8 +1205,8 @@ async function loadFleet(user) {
   // Playlists (Step 3 remainder): the scoped read's active
   // entries, grouped per company in pool order (the read
   // orders by platform then number). A failed read names
-  // itself in the banner above and leaves the sections at
-  // their zero counts — never another company's entries.
+  // itself in the banner above and leaves the playlist boxes
+  // at their zero counts — never another company's entries.
   Object.keys(playlistOf).forEach(k => delete playlistOf[k]);
   (playlistRows || []).forEach(r => {
     (playlistOf[r.organization_id] =
@@ -1131,6 +1232,8 @@ async function loadFleet(user) {
 
   const host = document.getElementById("orgs");
   host.innerHTML = "";
+  const plHost = document.getElementById("plorgs");
+  if (plHost) plHost.innerHTML = "";
   renderedOrgs = [];
   const alertsHost = document.getElementById("alerts");
   alertsHost.innerHTML = "";
@@ -1331,10 +1434,35 @@ async function loadFleet(user) {
         : (rows
           ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
           : "<div class='note'>No units yet.</div>")) +
-      "<div id='plhost-" + esc(org.id) + "'>" + playlistsHtml(org.id) + "</div>" +
       "</div>";
     host.appendChild(card);
     renderedOrgs.push(org.id);
+    // The company's box on the Playlist Management page (the
+    // refinement): the fleet card's own summary/body form,
+    // collapsed by default, holding the relocated playlist
+    // section. It renders on this same cycle, visible or not,
+    // so the page is current the moment the operator opens it.
+    if (plHost) {
+      const plExpanded = !!plOrgExpanded[org.id];
+      const plBox = document.createElement("div");
+      plBox.className = "card";
+      plBox.innerHTML =
+        "<button type='button' class='org-summary' data-plsummary='" +
+          esc(org.id) + "' aria-expanded='" +
+          (plExpanded ? "true" : "false") + "'>" +
+          "<span class='org-name'>" + esc(org.display_name) + "</span>" +
+          "<span class='org-counts' id='plcounts-" + esc(org.id) + "'>" +
+            esc(plCountsText(org.id)) + "</span>" +
+          "<span class='chev' id='plchev-" + esc(org.id) + "'>" +
+            (plExpanded ? "▾" : "▸") + "</span>" +
+        "</button>" +
+        "<div class='org-body' id='plorgbody-" + esc(org.id) + "'" +
+          (plExpanded ? "" : " hidden") + ">" +
+        "<div id='plsec-" + esc(org.id) + "'>" +
+          playlistsHtml(org.id) + "</div>" +
+        "</div>";
+      plHost.appendChild(plBox);
+    }
   });
   // The alerts area exists only while a condition stands.
   if (alerts.length) {
@@ -1364,9 +1492,15 @@ async function loadFleet(user) {
   host.querySelectorAll("[data-summary]").forEach(btn => {
     btn.addEventListener("click", () => toggleOrg(btn.dataset.summary));
   });
-  // Step 3 wiring: each company's playlist section binds its
-  // own add/remove controls (they rebind on every section
-  // re-render after a mutation).
+  // The refinement's wiring: the playlist page's summary
+  // lines toggle their boxes, and each company's playlist
+  // section binds its own add/remove controls (they rebind on
+  // every section re-render after a mutation).
+  if (plHost) {
+    plHost.querySelectorAll("[data-plsummary]").forEach(btn => {
+      btn.addEventListener("click", () => togglePlOrg(btn.dataset.plsummary));
+    });
+  }
   renderedOrgs.forEach(orgId => bindPlaylists(orgId));
   // A query still standing in the search field (the operator
   // typed, then the fleet reloaded) re-applies to the fresh
@@ -1521,10 +1655,11 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
 })();
 
 // The top-right menu (Anthony's layout, October 29, 2026): one
-// small button holds The Wizard, Gold Rush, and Sign out, so the
-// page body stays clear for the company cards and the controls
-// that will one day live on them. Any item click closes the menu;
-// a click anywhere outside closes it too.
+// small button holds the two views (Fleet / Playlist
+// Management, the refinement), The Wizard, Gold Rush, and Sign
+// out, so the page body stays clear for the company cards and
+// the controls that will one day live on them. Any item click
+// closes the menu; a click anywhere outside closes it too.
 (function initMenu() {
   const btn = document.getElementById("menuBtn");
   const panel = document.getElementById("menuPanel");
@@ -1539,6 +1674,13 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
 })();
 
 document.getElementById("rainBtn").addEventListener("click", moneyRain);
+
+// The view switch (the refinement): the menu's two view items
+// show one view and hide the other; the panel's own click
+// handler closes the menu behind the choice, as with every
+// item. The choice persists (see setView).
+document.getElementById("fleetNavBtn").addEventListener("click", () => setView("fleet"));
+document.getElementById("playlistNavBtn").addEventListener("click", () => setView("playlists"));
 
 // Download the app (Step 9 Part 1, Anthony's design, October 29,
 // 2026): the signed-in account downloads the current production
