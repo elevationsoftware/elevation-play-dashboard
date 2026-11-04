@@ -75,6 +75,42 @@
     color: var(--secondary); font-size: 13px; letter-spacing: 0.04em; cursor: pointer;
   }
   .note { color: var(--hint); font-size: 13px; margin-top: 10px; }
+  button:disabled { opacity: .55; cursor: default; }
+  /* Fleet controls (Step 7 Part 2): one quiet block directly
+     under each unit's row — the remote half of the control
+     surface the phone itself carries. Every control is
+     rectangular with rounded corners at ~20% of its height
+     (Anthony's standing rule): 34px controls, 7px radius. */
+  .ctl-row td { border-top: 0; padding-top: 2px; }
+  .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .ctl-btn {
+    margin: 0; height: 34px; padding: 0 14px; border-radius: 7px;
+    background: transparent; color: var(--gold);
+    border: 1px solid var(--gold);
+    font-size: 12.5px; font-weight: 600; letter-spacing: .04em;
+  }
+  .ctl-btn:active { background: #26292f; }
+  .ctl-btn.primary { background: var(--gold); color: var(--on-gold); }
+  .ctl-btn.primary:active { background: var(--gold-pressed); }
+  .seg { display: inline-flex; }
+  .seg button {
+    margin: 0; height: 34px; padding: 0 12px; border-radius: 0;
+    background: transparent; color: var(--secondary);
+    border: 1px solid var(--outline);
+    font-size: 12.5px; font-weight: 600; letter-spacing: .04em;
+  }
+  .seg button:first-child { border-radius: 7px 0 0 7px; }
+  .seg button:last-child { border-radius: 0 7px 7px 0; border-left: 0; }
+  .seg button:active { background: #26292f; }
+  .seg button.on { background: var(--gold); color: var(--on-gold); border-color: var(--gold); }
+  .seg button.on:active { background: var(--gold-pressed); }
+  .badge {
+    display: inline-block; margin-left: 8px; padding: 2px 8px;
+    border: 1px solid var(--gold); border-radius: 5px; color: var(--gold);
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; vertical-align: 2px;
+  }
+  .cmd-line { font-size: 12.5px; color: var(--hint); margin-top: 8px; min-height: 15px; }
+  .cmd-line.bad { color: #e8a0a0; }
   /* The page rises as it loads — one quiet fade-and-lift, then
      stillness. Anthony's pick (October 29, 2026). */
   @keyframes rise {
@@ -162,6 +198,265 @@ function when(ts) {
   return d.toLocaleString();
 }
 
+// Fleet controls (Step 7 Part 2) — the dashboard half of the
+// command road Part 1 built (migration 20261103120000). The one
+// write is the definer eps.enqueue_unit_command: a closed
+// command set; a per-type payload contract (start_session may
+// carry {platform} — 'apple_music' or 'youtube'; every other
+// type takes {}); coded refusals (P0523 not permitted — an
+// unknown unit answers identically, P0524 invalid, P0525 key
+// conflict); and idempotency — the key names the intended
+// command, so a retry of the SAME press reuses its key and the
+// server returns the standing command instead of duplicating
+// it, while a fresh press mints a fresh key.
+//
+// The definer takes the actor's user id explicitly and grants
+// EXECUTE to the server runtime role only: by Part 1's design
+// its caller is the dashboard boundary, which proves the actor
+// server-side. This page therefore never calls the definer
+// directly and never sends an actor id — it invokes the
+// boundary function eps-unit-command with the four command
+// facts, and the boundary derives the actor from this page's
+// verified session token before calling the definer. The
+// function's coded answers ({ code: "P0523" } and its kin,
+// on their mapped statuses) drive the same status lines the
+// definer's codes did.
+//
+// The phone applies commands at its check-in (~5 minutes), so
+// states advance asynchronously — a command can be ACKNOWLEDGED
+// at one check-in and only COMPLETED at the next. The line
+// under a unit shows its latest command as "TYPE — STATE ·
+// outcome"; after an enqueue the page follows THAT command,
+// polling once a minute until it reaches a terminal state
+// (completed / failed / expired) or a bounded ~15 minutes pass
+// — three check-in cycles with margin. Each command is tracked
+// under its own id, so a later command never cancels an earlier
+// command's tracking, and the line always follows the newest
+// command: a late poll for an older command cannot overwrite
+// it. The same poll re-reads the unit's operator_disabled
+// flag, so the DISABLE/ENABLE swap and the DISABLED badge stay
+// true on the open page — whether the change came from a
+// command sent here, from the phone, or from another operator
+// — without a page reload.
+const CMD_LABEL = {
+  start_session: "START", stop_session: "STOP",
+  restart_runtime: "RESTART", disable_unit: "DISABLE",
+  enable_unit: "ENABLE",
+};
+let actorId = null;
+const unitPlatform = {};  // unit id -> 'apple_music' | 'youtube' (the START override)
+const sentCmds = {};      // unit id -> {type, state, code} enqueued this session
+const pressKeys = {};     // unit id + '|' + type -> idempotency key of an unconfirmed press
+const CMD_POLL_MS = 60000;   // poll cadence while a command is in flight
+const CMD_POLL_MAX = 15;     // ~15 minutes of polling, then the last known state stands
+const CMD_TERMINAL = { completed: true, failed: true, expired: true };
+const trackedCmds = {};   // command id -> {unitId, polls, timer}: one tracker per command
+const lineShown = {};     // unit id -> {id, seq}: the command the status line currently reflects
+const unitDisabled = {};  // unit id -> bool: operator_disabled as currently rendered
+
+function cmdLineText(rec) {
+  if (!rec || !rec.type) return "";
+  return (CMD_LABEL[rec.type] || rec.type) + " — " +
+    String(rec.state || "").toUpperCase() +
+    (rec.code ? " · " + rec.code : "");
+}
+function setCmdLine(unitId, text, isErr) {
+  const el = document.getElementById("cmd-" + unitId);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("bad", !!isErr);
+}
+
+function writeCmdLine(unitId, row) {
+  // The line follows the NEWEST command for the unit, and only
+  // that command. delivery_seq is the server's own ordering:
+  // a read whose command is older than the one the line
+  // already shows (an earlier command's poll landing late)
+  // writes nothing. A command enqueued this session counts as
+  // newest from the moment it is sent; until a read sequences
+  // it, only its own reads may move the line.
+  const shown = lineShown[unitId];
+  if (shown && row.id && shown.id === row.id) {
+    if (row.seq != null) shown.seq = row.seq;
+  } else if (shown && shown.id && row.id && shown.seq == null) {
+    return;
+  } else if (shown && shown.seq != null && row.seq != null &&
+             row.seq < shown.seq) {
+    return;
+  }
+  lineShown[unitId] = {
+    id: row.id || (shown && shown.id) || null,
+    seq: row.seq != null ? row.seq : (shown ? shown.seq : null),
+  };
+  setCmdLine(unitId, cmdLineText(row), false);
+}
+
+function applyUnitFlag(unitId, dis) {
+  // The DISABLED presentation, mutated on the standing nodes —
+  // the same three facts loadFleet renders (the badge, the
+  // DISABLE/ENABLE swap, and which button is primary) — so the
+  // open page corrects itself with no reload. The swap button's
+  // click handler reads data-cmd at click time, so retargeting
+  // the standing button is the whole change.
+  const badge = document.getElementById("unitbadge-" + unitId);
+  if (badge) badge.innerHTML = dis ? "<span class='badge'>DISABLED</span>" : "";
+  const flagBtn = document.getElementById("flagbtn-" + unitId);
+  if (flagBtn) {
+    flagBtn.dataset.cmd = dis ? "enable_unit" : "disable_unit";
+    flagBtn.textContent = dis ? "ENABLE UNIT" : "DISABLE UNIT";
+    flagBtn.classList.toggle("primary", dis);
+  }
+  const startBtn = document.getElementById("startbtn-" + unitId);
+  if (startBtn) startBtn.classList.toggle("primary", !dis);
+}
+
+async function refreshUnitFlag(unitId) {
+  // Re-read the unit's operator_disabled and, if it no longer
+  // matches what the row shows, correct the row in place —
+  // however the flag changed.
+  try {
+    const { data, error } = await eps().from("system_units")
+      .select("operator_disabled").eq("id", unitId).limit(1);
+    if (error || !data || !data.length) return;
+    const dis = !!data[0].operator_disabled;
+    if (unitDisabled[unitId] === dis) return;
+    unitDisabled[unitId] = dis;
+    applyUnitFlag(unitId, dis);
+  } catch (e) { /* the standing presentation stays as it was */ }
+}
+
+function trackCommand(unitId, cmdId) {
+  // One tracker per command id: a later command — on this unit
+  // or any other — gets its own tracker and never disturbs
+  // this one.
+  if (trackedCmds[cmdId]) return;
+  const tr = { unitId, polls: 0, timer: null };
+  trackedCmds[cmdId] = tr;
+  tr.timer = setTimeout(() => pollCommand(cmdId), CMD_POLL_MS);
+}
+
+async function pollCommand(cmdId) {
+  const tr = trackedCmds[cmdId];
+  if (!tr) return;
+  const unitId = tr.unitId;
+  tr.polls += 1;
+  let mine = null;
+  try {
+    const { data, error } = await eps().from("commands")
+      .select("id, command_type, state, result, delivery_seq")
+      .eq("id", cmdId).limit(1);
+    if (!error && data && data.length) mine = data[0];
+  } catch (e) { /* a failed read changes nothing; the bound still applies */ }
+  if (mine) {
+    writeCmdLine(unitId, {
+      id: mine.id, seq: mine.delivery_seq, type: mine.command_type,
+      state: mine.state, code: mine.result && mine.result.code,
+    });
+  }
+  // The line follows the unit's newest command, whoever sent
+  // it; the ordering guard in writeCmdLine keeps this from
+  // ever moving the line backwards.
+  try {
+    const { data, error } = await eps().from("commands")
+      .select("id, command_type, state, result, delivery_seq")
+      .eq("system_unit_id", unitId)
+      .order("delivery_seq", { ascending: false }).limit(1);
+    if (!error && data && data.length) {
+      const c = data[0];
+      writeCmdLine(unitId, {
+        id: c.id, seq: c.delivery_seq, type: c.command_type,
+        state: c.state, code: c.result && c.result.code,
+      });
+    }
+  } catch (e) { /* the standing line stays as it was */ }
+  // A command resolving — above all a disable or enable —
+  // can change the flag the row presents; re-read it on the
+  // same cycle.
+  await refreshUnitFlag(unitId);
+  if ((mine && CMD_TERMINAL[mine.state]) || tr.polls >= CMD_POLL_MAX) {
+    // Terminal: following ends. Bound reached without one:
+    // following ends too, and the last known state stands —
+    // no error, and nothing is fabricated.
+    delete trackedCmds[cmdId];
+    return;
+  }
+  tr.timer = setTimeout(() => pollCommand(cmdId), CMD_POLL_MS);
+}
+
+async function sendCommand(btn) {
+  const unitId = btn.dataset.unit;
+  const type = btn.dataset.cmd;
+  if (!actorId) {
+    setCmdLine(unitId, "SIGN-IN EXPIRED — RELOAD THE PAGE", true);
+    return;
+  }
+  const payload = type === "start_session"
+    ? { platform: unitPlatform[unitId] || "apple_music" }
+    : {};
+  const pressId = unitId + "|" + type;
+  if (!pressKeys[pressId]) {
+    pressKeys[pressId] = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : "dash-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+  }
+  btn.disabled = true;
+  try {
+    const { data, error } = await client.functions.invoke("eps-unit-command", {
+      body: {
+        system_unit_id: unitId,
+        command_type: type,
+        payload: payload,
+        idempotency_key: pressKeys[pressId],
+      },
+    });
+    if (error) {
+      // The boundary answers a coded refusal as { code } on the
+      // response body; supabase-js surfaces a non-200 as an
+      // error whose context is that response. A coded refusal
+      // is a definitive answer: the press is over and its key
+      // is retired. Any other failure is ambiguous (the command
+      // may or may not stand), so the key is KEPT — a retry
+      // then returns the standing command instead of sending a
+      // second one. Raw error detail is never shown.
+      let code = "";
+      try {
+        const respBody = error.context
+          ? await error.context.json() : null;
+        if (respBody && typeof respBody.code === "string") {
+          code = respBody.code;
+        }
+      } catch (e) { /* no coded body — the failure stays ambiguous */ }
+      if (code === "P0523") {
+        delete pressKeys[pressId];
+        setCmdLine(unitId, "NOT PERMITTED FOR THIS ACCOUNT", true);
+      } else if (code === "P0524") {
+        delete pressKeys[pressId];
+        setCmdLine(unitId, "THAT COMMAND WAS NOT VALID", true);
+      } else if (code === "P0525") {
+        delete pressKeys[pressId];
+        setCmdLine(unitId, "ALREADY RECORDED — NOT SENT TWICE", true);
+      } else {
+        setCmdLine(unitId, "COULD NOT SEND — PLEASE TRY AGAIN", true);
+      }
+      return;
+    }
+    delete pressKeys[pressId];
+    const rec = { type, state: data ? data.command_state : "pending", code: null };
+    sentCmds[unitId] = rec;
+    const cmdId = data && data.command_id ? String(data.command_id) : null;
+    if (cmdId) lineShown[unitId] = { id: cmdId, seq: null };
+    setCmdLine(unitId, cmdLineText(rec), false);
+    // Follow this command under its own id until it resolves:
+    // the phone picks it up at a check-in, may acknowledge it
+    // at one and complete it at the next.
+    if (cmdId && !CMD_TERMINAL[rec.state]) trackCommand(unitId, cmdId);
+  } catch (e) {
+    setCmdLine(unitId, "COULD NOT SEND — PLEASE TRY AGAIN", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function moneyRain() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const layer = document.createElement("div");
@@ -188,6 +483,7 @@ function moneyRain() {
 
 async function loadFleet(user) {
   hide("signin"); show("fleet");
+  actorId = user.id;
   document.getElementById("who").textContent =
     (user.user_metadata && user.user_metadata.display_name) || user.email;
   const err = document.getElementById("fleetErr");
@@ -197,7 +493,7 @@ async function loadFleet(user) {
   // unknown — never silently treated as empty or healthy.
   const reads = await Promise.all([
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
-      eps().from("system_units").select("id, organization_id, unit_key, status"),
+      eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
       eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
@@ -225,6 +521,29 @@ async function loadFleet(user) {
       "account_org_entitlement_state", { p_organization_id: org.id });
     stateOf[org.id] = error ? null : data;
   }));
+  // Recent commands, newest first, for the control status
+  // lines (eps.commands is in the account's read surface since
+  // migration 20261103200000, scoped to the organizations the
+  // account may see). A separate, quiet read: if it fails it
+  // yields nothing — no banner, and no state is ever fabricated
+  // for the lines.
+  let cmdRows = [];
+  try {
+    const cmdRead = await eps().from("commands")
+      .select("id, system_unit_id, command_type, state, result, delivery_seq")
+      .order("delivery_seq", { ascending: false }).limit(200);
+    if (!cmdRead.error) cmdRows = cmdRead.data || [];
+  } catch (e) { cmdRows = []; }
+  const latestCmd = {};
+  cmdRows.forEach(c => {
+    if (!latestCmd[c.system_unit_id]) {
+      latestCmd[c.system_unit_id] = {
+        id: c.id, seq: c.delivery_seq,
+        type: c.command_type, state: c.state,
+        code: c.result && c.result.code,
+      };
+    }
+  });
   const labelOf = {}, runtimeOf = {}, lastBeat = {}, periodOf = {}, noticeCount = {};
   (labels || []).forEach(r => { labelOf[r.system_unit_id] = r.label; });
   (runtime || []).forEach(r => { runtimeOf[r.system_unit_id] = r; });
@@ -249,10 +568,46 @@ async function loadFleet(user) {
   fleets.forEach(org => {
     const rows = (units || []).filter(u => u.organization_id === org.id).map(u => {
       const rt = runtimeOf[u.id] || {};
-      return "<tr><td>" + esc(labelOf[u.id] || u.unit_key) + "</td>" +
+      // The unit's recorded platform ('apple' | 'youtube')
+      // seeds the START override, in the payload's own
+      // vocabulary ('apple_music' | 'youtube').
+      const plat = rt.current_platform === "youtube" ? "youtube" : "apple_music";
+      unitPlatform[u.id] = plat;
+      const dis = !!u.operator_disabled;
+      unitDisabled[u.id] = dis;
+      const cmd = latestCmd[u.id] || sentCmds[u.id];
+      if (latestCmd[u.id]) {
+        lineShown[u.id] = { id: latestCmd[u.id].id, seq: latestCmd[u.id].seq };
+      }
+      return "<tr><td>" + esc(labelOf[u.id] || u.unit_key) +
+        "<span id='unitbadge-" + esc(u.id) + "'>" +
+          (dis ? "<span class='badge'>DISABLED</span>" : "") + "</span></td>" +
         "<td>" + esc(u.status) + "</td>" +
         "<td class='dim'>" + esc(rt.current_platform || "—") + "</td>" +
-        "<td class='dim'>" + when(lastBeat[u.id] || rt.updated_at) + "</td></tr>";
+        "<td class='dim'>" + when(lastBeat[u.id] || rt.updated_at) + "</td></tr>" +
+        "<tr class='ctl-row'><td colspan='4'><div class='ctl'>" +
+        "<span class='seg' data-seg='" + esc(u.id) + "'>" +
+          "<button type='button' data-plat='apple_music'" +
+            (plat === "apple_music" ? " class='on'" : "") + ">APPLE MUSIC</button>" +
+          "<button type='button' data-plat='youtube'" +
+            (plat === "youtube" ? " class='on'" : "") + ">YOUTUBE</button>" +
+        "</span>" +
+        "<button type='button' class='ctl-btn" + (dis ? "" : " primary") +
+          "' id='startbtn-" + esc(u.id) +
+          "' data-cmd='start_session' data-unit='" + esc(u.id) + "'>START SESSION</button>" +
+        "<button type='button' class='ctl-btn' data-cmd='stop_session' data-unit='" +
+          esc(u.id) + "'>STOP SESSION</button>" +
+        "<button type='button' class='ctl-btn' data-cmd='restart_runtime' data-unit='" +
+          esc(u.id) + "'>RESTART RUNTIME</button>" +
+        (dis
+          ? "<button type='button' class='ctl-btn primary' id='flagbtn-" + esc(u.id) +
+              "' data-cmd='enable_unit' data-unit='" +
+              esc(u.id) + "'>ENABLE UNIT</button>"
+          : "<button type='button' class='ctl-btn' id='flagbtn-" + esc(u.id) +
+              "' data-cmd='disable_unit' data-unit='" +
+              esc(u.id) + "'>DISABLE UNIT</button>") +
+        "</div><div class='cmd-line' id='cmd-" + esc(u.id) + "'>" +
+          esc(cmdLineText(cmd)) + "</div></td></tr>";
     }).join("");
     const period = periodOf[org.id];
     const billing = org.is_root_authority
@@ -279,6 +634,20 @@ async function loadFleet(user) {
           ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
           : "<div class='note'>No units yet.</div>"));
     host.appendChild(card);
+  });
+  // Control wiring: command buttons send; the segmented
+  // control only chooses the platform the next START carries.
+  host.querySelectorAll("[data-cmd]").forEach(btn => {
+    btn.addEventListener("click", () => sendCommand(btn));
+  });
+  host.querySelectorAll("[data-seg]").forEach(seg => {
+    seg.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        unitPlatform[seg.dataset.seg] = b.dataset.plat;
+        seg.querySelectorAll("button").forEach(x =>
+          x.classList.toggle("on", x === b));
+      });
+    });
   });
   // Test organizations stay excluded from the display, silently —
   // at Anthony's direction (October 29, 2026) the "not shown" line
