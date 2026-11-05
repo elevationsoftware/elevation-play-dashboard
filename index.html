@@ -772,6 +772,27 @@ function durationWords(ms) {
   return days + (days === 1 ? " DAY" : " DAYS");
 }
 
+// The conducted session's times (November 5, 2026), stated in
+// the viewer's own clock: when the standing session began,
+// when it ends, and its whole length in minutes — the end
+// time doubles as when the next session begins, since the
+// engine runs session after session. Both instants or
+// neither: a half-pair is not a fact, and a phone whose build
+// does not report them shows nothing extra (Part 3's leniency,
+// carried to the screen).
+function sessionTimesText(rt) {
+  const s = rt && rt.session_started_at;
+  const e = rt && rt.session_deadline_at;
+  if (!s || !e) return null;
+  const start = new Date(s);
+  const end = new Date(e);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+  const clock = d => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const mins = Math.round((end.getTime() - start.getTime()) / 60000);
+  return "STARTED " + clock(start) + " · ENDS " + clock(end) +
+    " · " + mins + " MIN";
+}
+
 // The deepened status: the unit's lifecycle word stands for a
 // unit that is not active; under active, the two disable
 // sources outrank conducting (a disable stops the session), and
@@ -1174,7 +1195,7 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, last_checkin_at"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_checkin_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
@@ -1333,8 +1354,13 @@ async function loadFleet(user) {
       const st = unitStatusOf(u, rt);
       statusWords.push(st.word);
       unitSearch.push(labelOf[u.id] || u.unit_key, u.unit_key);
+      // Under PLAYING, the session's times ride beneath the
+      // entry in the same sub-line style (November 5, 2026) —
+      // present only when the phone reported both instants.
+      const times = st.word === "PLAYING" ? sessionTimesText(rt) : null;
       const statusHtml = esc(st.word) +
-        (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "");
+        (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "") +
+        (times ? "<div class='sub-line'>" + esc(times) + "</div>" : "");
       unitStatusHtml[u.id] = statusHtml;
       const ver = versionOf[u.id];
       // Critical alerts (Part 3), unit level — each line names
