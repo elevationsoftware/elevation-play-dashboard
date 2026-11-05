@@ -62,9 +62,12 @@
   .menu-item.gold { background: var(--gold); color: #191104; font-weight: 600; text-align: center; margin-top: 6px; }
   .menu-item.gold:hover { background: #A98F52; }
   /* THE WIZARD carries the company names' treatment — the same
-     inherited face at their full weight (700); its size stays
-     the menu's own. (Anthony, November 4, 2026.) */
-  #wizardBtn { font-weight: 700; }
+     inherited face at their full weight (700) and in their
+     capital form, the way the initials stand; its size stays
+     the menu's own. The weight alone did not read as the same
+     style at menu size, so the full treatment applies.
+     (Anthony, November 4, 2026.) */
+  #wizardBtn { font-weight: 700; text-transform: uppercase; }
   .wizard-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
   .wizard-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 11, 12, .72); z-index: 60; padding: 24px; }
   .wizard-overlay[hidden] { display: none; }
@@ -553,6 +556,8 @@ function playlistsHtml(orgId) {
     "<div class='pl-form'>" +
     "<input id='pl-apple-link-" + esc(orgId) + "' type='text' " +
       "placeholder='PLAYLIST LINK' aria-label='Apple Music playlist link'>" +
+    "<input id='pl-apple-name-" + esc(orgId) + "' type='text' " +
+      "placeholder='NAME' aria-label='Apple Music playlist name'>" +
     "<button type='button' class='ctl-btn' data-pladd='apple_music' " +
       "data-org='" + esc(orgId) + "'>ADD</button></div>" +
     "<div class='pl-plat'>YOUTUBE</div>" + lines(yt) +
@@ -624,10 +629,15 @@ async function addPlaylist(btn) {
       setPlLine(orgId, "PASTE THE PLAYLIST LINK FIRST", true);
       return;
     }
+    // The name slot stands for Apple too (Anthony, November 4,
+    // 2026): a name given here is the entry's name; left blank,
+    // the server still derives one from the link, as before.
+    const nameEl = document.getElementById("pl-apple-name-" + orgId);
+    const name = ((nameEl && nameEl.value) || "").trim();
     args = {
       p_organization_id: orgId,
       p_platform: "apple_music", p_playlist_url: link,
-      p_video_url: null, p_name: null,
+      p_video_url: null, p_name: name || null,
     };
   } else {
     const field = id => {
