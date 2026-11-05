@@ -54,6 +54,16 @@
      opened behind them (Anthony's screenshot, October 29, 2026). */
   .bar { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 70; }
   .menu-wrap { position: relative; }
+  /* The bar's right side groups Refresh with the menu
+     (Anthony, November 4, 2026): Refresh re-reads the fleet
+     in place, so it stands beside the menu as the bar's
+     second control rather than inside it. */
+  .bar-right { display: flex; align-items: center; gap: 10px; }
+  /* Refresh wears the ghost treatment — transparent ground,
+     gold border and text (the button.ghost rule above) —
+     sized to the menu button's height beside it, corners
+     rounded the same way. */
+  .refresh-btn { padding: 7px 13px; border-radius: 10px; font-size: 14px; line-height: 1.2; letter-spacing: .05em; }
   .menu-btn { position: relative; width: auto; padding: 7px 13px; background: var(--surface); border: 1px solid var(--outline); border-radius: 10px; color: var(--text); font-size: 17px; line-height: 1.2; cursor: pointer; }
   .menu-panel { position: absolute; right: 0; top: calc(100% + 8px); background: var(--surface); border: 1px solid var(--outline); border-radius: 12px; min-width: 204px; padding: 6px; z-index: 50; box-shadow: 0 12px 32px rgba(0, 0, 0, .5); }
   .menu-panel[hidden] { display: none; }
@@ -258,15 +268,18 @@
   <div id="fleet" hidden>
     <div class="bar">
       <div class="dim" id="who"></div>
-      <div class="menu-wrap">
-        <button id="menuBtn" class="menu-btn" aria-label="Menu">&#9776;<span id="wizardDot" class="wizard-dot" hidden></span></button>
-        <div id="menuPanel" class="menu-panel" hidden>
-          <button id="fleetNavBtn" class="menu-item">Fleet</button>
-          <button id="playlistNavBtn" class="menu-item">Playlist Management</button>
-          <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
-          <button id="rainBtn" class="menu-item">Gold Rush</button>
-          <button id="downloadBtn" class="menu-item">Download the app</button>
-          <button id="signoutBtn" class="menu-item gold">Sign out</button>
+      <div class="bar-right">
+        <button id="refreshBtn" class="ghost refresh-btn" type="button">REFRESH</button>
+        <div class="menu-wrap">
+          <button id="menuBtn" class="menu-btn" aria-label="Menu">&#9776;<span id="wizardDot" class="wizard-dot" hidden></span></button>
+          <div id="menuPanel" class="menu-panel" hidden>
+            <button id="fleetNavBtn" class="menu-item">Fleet</button>
+            <button id="playlistNavBtn" class="menu-item">Playlist Management</button>
+            <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
+            <button id="rainBtn" class="menu-item">Gold Rush</button>
+            <button id="downloadBtn" class="menu-item">Download the app</button>
+            <button id="signoutBtn" class="menu-item gold">Sign out</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1709,6 +1722,32 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
     if (!panel.hidden && !ev.target.closest(".menu-wrap")) panel.hidden = true;
   });
 })();
+
+// Refresh (Anthony, November 4, 2026): re-read the fleet in
+// place instead of reloading the whole page. The button
+// re-runs the boot path's own load — the standing session's
+// user into loadFleet — so a refresh shows exactly what a
+// fresh sign-in load shows, in whichever view stands open.
+// The button disables itself and says so while the reads are
+// in flight, and restores itself whatever happens; with no
+// session standing there is nothing to refresh and the
+// sign-in view owns the page.
+document.getElementById("refreshBtn").addEventListener("click", async (ev) => {
+  const btn = ev.currentTarget;
+  const err = document.getElementById("fleetErr");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "REFRESHING…";
+  try {
+    const { data: { session } } = await client.auth.getSession();
+    if (session) await loadFleet(session.user);
+  } catch (e) {
+    err.textContent = "Refresh failed: " + (e && e.message ? e.message : e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
 
 document.getElementById("rainBtn").addEventListener("click", moneyRain);
 
