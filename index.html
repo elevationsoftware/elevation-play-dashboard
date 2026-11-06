@@ -279,6 +279,7 @@
           <div id="menuPanel" class="menu-panel" hidden>
             <button id="fleetNavBtn" class="menu-item">Fleet</button>
             <button id="playlistNavBtn" class="menu-item">Playlist Management</button>
+            <button id="clientsNavBtn" class="menu-item" hidden>Clients</button>
             <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
             <button id="rainBtn" class="menu-item">Gold Rush</button>
             <button id="downloadBtn" class="menu-item">Download the app</button>
@@ -292,6 +293,13 @@
       <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
       <div id="orgs"></div>
       <div id="noMatch" class="note" hidden>No companies or units match.</div>
+    </div>
+    <div id="clientsView" hidden>
+      <div class="view-head">CLIENTS</div>
+      <div id="clientAlerts" class="alerts" hidden></div>
+      <input id="clientSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
+      <div id="clientOrgs"></div>
+      <div id="clientNoMatch" class="note" hidden>No companies or units match.</div>
     </div>
     <div id="playlistView" hidden>
       <div class="view-head">PLAYLIST MANAGEMENT</div>
@@ -471,7 +479,7 @@ let renderedOrgs = [];     // org ids rendered by the latest loadFleet, in displ
 // every company (management is occasional, and the Elevation
 // box holds the whole pool), and their toggles persist under
 // their OWN key, separate from the fleet cards' choices.
-let currentView = "fleet";  // 'fleet' | 'playlists'
+let currentView = "fleet";  // 'fleet' | 'playlists' | 'clients'
 const plOrgExpanded = {};   // org id -> bool: the playlist boxes' expansion choices
 try {
   const savedPl = JSON.parse(localStorage.getItem("epsPlOrgExpanded") || "{}");
@@ -483,12 +491,14 @@ try {
 function applyView() {
   const fleetView = document.getElementById("fleetView");
   const playlistView = document.getElementById("playlistView");
+  const clientsView = document.getElementById("clientsView");
   if (fleetView) fleetView.hidden = currentView !== "fleet";
   if (playlistView) playlistView.hidden = currentView !== "playlists";
+  if (clientsView) clientsView.hidden = currentView !== "clients";
 }
 
 function setView(name) {
-  currentView = name === "playlists" ? "playlists" : "fleet";
+  currentView = (name === "playlists" || name === "clients") ? name : "fleet";
   try { localStorage.setItem("epsDashView", currentView); } catch (e) {}
   applyView();
 }
@@ -562,7 +572,7 @@ function plCountsText(orgId) {
   const entries = playlistOf[orgId] || [];
   const apple = entries.filter(e => e.platform === "apple_music").length;
   const yt = entries.filter(e => e.platform === "youtube").length;
-  return apple + " APPLE · " + yt + " YOUTUBE";
+  return apple + " A · " + yt + " Y";
 }
 
 function playlistsHtml(orgId) {
@@ -577,18 +587,18 @@ function playlistsHtml(orgId) {
   ).join("");
   return "<div class='pl'><div class='pl-head'>PLAYLISTS — " +
     plCountsText(orgId) + "</div>" +
-    "<div class='pl-plat'>APPLE MUSIC</div>" + lines(apple) +
+    "<div class='pl-plat'>A</div>" + lines(apple) +
     "<div class='pl-form'>" +
     "<input id='pl-apple-link-" + esc(orgId) + "' type='text' " +
-      "placeholder='PLAYLIST LINK' aria-label='Apple Music playlist link'>" +
+      "placeholder='PLAYLIST LINK' aria-label='A playlist link'>" +
     "<input id='pl-apple-name-" + esc(orgId) + "' type='text' " +
-      "placeholder='NAME' aria-label='Apple Music playlist name'>" +
+      "placeholder='NAME' aria-label='A playlist name'>" +
     "<button type='button' class='ctl-btn' data-pladd='apple_music' " +
       "data-org='" + esc(orgId) + "'>ADD</button></div>" +
-    "<div class='pl-plat'>YOUTUBE</div>" + lines(yt) +
+    "<div class='pl-plat'>Y</div>" + lines(yt) +
     "<div class='pl-form'>" +
     "<input id='pl-yt-link-" + esc(orgId) + "' type='text' " +
-      "placeholder='PLAYLIST LINK' aria-label='YouTube playlist link'>" +
+      "placeholder='PLAYLIST LINK' aria-label='Y playlist link'>" +
     "<input id='pl-yt-video-" + esc(orgId) + "' type='text' " +
       "placeholder='ONE VIDEO LINK FROM IT' aria-label='One video link from the playlist'>" +
     "<input id='pl-yt-name-" + esc(orgId) + "' type='text' " +
@@ -746,8 +756,8 @@ async function removePlaylist(btn) {
 // The runtime table stores its own platform vocabulary
 // ('apple' | 'youtube'); the display names the platform in full.
 function platLabel(stored) {
-  if (stored === "apple") return "APPLE MUSIC";
-  if (stored === "youtube") return "YOUTUBE";
+  if (stored === "apple") return "A";
+  if (stored === "youtube") return "Y";
   return stored ? String(stored).toUpperCase() : "—";
 }
 
@@ -1108,31 +1118,76 @@ function toggleOrg(orgId) {
   applyOrgExpansion(orgId);
 }
 
-// Search (Part 4): filter as you type. A card carries its
-// search text (company name + every unit's label and key) in
-// data-search and its company name alone in data-name: a name
-// match filters, and a UNIT match additionally holds its
-// company open while the query stands. Clearing the query
-// restores every card and the operator's own expansion states.
-function applySearch() {
-  const input = document.getElementById("fleetSearch");
+// Search (Part 4; promotion model, November 5, 2026): the list
+// always stands whole — nothing is ever hidden. A company card
+// carries the company text in data-search; each unit's two rows
+// carry the unit's label in data-usearch. Typing a unit lifts
+// that unit's rows to the top of its card, above the standing
+// head of the list, and holds the card open; everything else
+// keeps its order below. A company match leaves the order
+// untouched. Clearing the query restores the exact standing
+// order the card was rendered in.
+const standingOrder = new WeakMap();
+function applySearchIn(root, input, note) {
+  if (!root || !input) return;
   const q = (input.value || "").trim().toLowerCase();
-  searchForce.clear();
-  let total = 0, visible = 0;
-  document.querySelectorAll("[data-search]").forEach(card => {
+  let total = 0, matched = 0;
+  root.querySelectorAll("[data-search]").forEach(card => {
     total++;
-    const matches = q === "" || card.dataset.search.includes(q);
-    card.hidden = !matches;
-    if (matches) {
-      visible++;
-      if (q !== "" && !(card.dataset.name || "").includes(q)) {
-        searchForce.add(card.dataset.org);
-      }
+    const rows = Array.from(card.querySelectorAll("[data-usearch]"));
+    const pairs = [];
+    for (let i = 0; i + 1 < rows.length; i += 2) {
+      pairs.push([rows[i], rows[i + 1]]);
+    }
+    if (!standingOrder.has(card)) {
+      standingOrder.set(card, pairs.map(p => p[0]));
+    }
+    if (q === "") {
+      const standing = standingOrder.get(card);
+      pairs.sort((a, b) =>
+        standing.indexOf(a[0]) - standing.indexOf(b[0]));
+      pairs.forEach(p => p.forEach(r => r.parentNode.appendChild(r)));
+      matched++;
+      return;
+    }
+    if (card.dataset.search.includes(q)) { matched++; return; }
+    // An exact unit label — or its bare number — outranks partial
+    // matches: "d2" and "2" select D2 alone, never D20 or D200.
+    // Partial matching applies only when no unit matches exactly.
+    const bareNum = s => {
+      const m = /^d(\d+)$/.exec(s);
+      if (m) return m[1];
+      return /^\d+$/.test(s) ? s : null;
+    };
+    const qn = bareNum(q);
+    const isExact = p => {
+      const lab = p[0].dataset.usearch;
+      if (lab === q) return true;
+      const ln = bareNum(lab);
+      return ln !== null && qn !== null && ln === qn;
+    };
+    let head = pairs.filter(isExact);
+    if (!head.length) {
+      head = pairs.filter(p => p[0].dataset.usearch.includes(q));
+    }
+    const tail = pairs.filter(p => !head.includes(p));
+    if (head.length) {
+      matched++;
+      head.concat(tail).forEach(p =>
+        p.forEach(r => r.parentNode.appendChild(r)));
+      searchForce.add(card.dataset.org);
     }
   });
+  if (note) note.hidden = !(q !== "" && total > 0 && matched === 0);
+}
+
+function applySearch() {
+  searchForce.clear();
+  applySearchIn(document.getElementById("fleetView"),
+    document.getElementById("fleetSearch"), document.getElementById("noMatch"));
+  applySearchIn(document.getElementById("clientsView"),
+    document.getElementById("clientSearch"), document.getElementById("clientNoMatch"));
   renderedOrgs.forEach(applyOrgExpansion);
-  const noMatch = document.getElementById("noMatch");
-  if (noMatch) noMatch.hidden = !(q !== "" && total > 0 && visible === 0);
 }
 
 function moneyRain() {
@@ -1182,9 +1237,10 @@ async function loadFleet(user) {
   // the page the operator left open; a fresh device starts on
   // the fleet.
   try {
+    const savedView = localStorage.getItem("epsDashView");
     currentView =
-      localStorage.getItem("epsDashView") === "playlists"
-        ? "playlists" : "fleet";
+      (savedView === "playlists" || savedView === "clients")
+        ? savedView : "fleet";
   } catch (e) { currentView = "fleet"; }
   applyView();
   actorId = user.id;
@@ -1252,6 +1308,14 @@ async function loadFleet(user) {
   });
   const labelOf = {}, runtimeOf = {}, periodOf = {}, noticeCount = {};
   (labels || []).forEach(r => { labelOf[r.system_unit_id] = r.label; });
+  // Fleet display order (Anthony, November 5, 2026): units list
+  // sorted by their label, numbers counted naturally — D9
+  // before D10 — whatever order they were activated in. Units
+  // without a label sort by their key. Sorting the one array
+  // here orders every company's box and table alike.
+  (units || []).sort((a, b) =>
+    String(labelOf[a.id] || a.unit_key).localeCompare(String(labelOf[b.id] || b.unit_key), undefined, { numeric: true })
+    || String(a.unit_key).localeCompare(String(b.unit_key), undefined, { numeric: true }));
   (runtime || []).forEach(r => { runtimeOf[r.system_unit_id] = r; });
   // (The heartbeats read above stays in the read set — its
   // failure is still surfaced by name — but nothing renders
@@ -1306,30 +1370,59 @@ async function loadFleet(user) {
 
   const host = document.getElementById("orgs");
   host.innerHTML = "";
+  const clientHost = document.getElementById("clientOrgs") || host;
+  if (clientHost !== host) clientHost.innerHTML = "";
   const plHost = document.getElementById("plorgs");
   if (plHost) plHost.innerHTML = "";
   renderedOrgs = [];
   const alertsHost = document.getElementById("alerts");
   alertsHost.innerHTML = "";
   alertsHost.hidden = true;
+  const clientAlertsHost = document.getElementById("clientAlerts") || alertsHost;
+  if (clientAlertsHost !== alertsHost) {
+    clientAlertsHost.innerHTML = "";
+    clientAlertsHost.hidden = true;
+  }
   if (!orgs || orgs.length === 0) {
+    const cnb0 = document.getElementById("clientsNavBtn");
+    if (cnb0) cnb0.hidden = true;
+    if (currentView === "clients") setView("fleet");
     host.innerHTML = '<div class="card">This account has no access.' +
       '<div class="note">Access is granted by membership — ask the operator to provision this account.</div></div>';
     return;
   }
   const alerts = [];
+  const clientAlerts = [];
   // Test organizations (designated in the data, S6B) are kept
   // out of the fleet view; the exclusion itself is shown, never
   // silent. Their records stay in the system untouched.
   const testCount = orgs.filter(o => o.is_test).length;
   const fleets = orgs.filter(o => !o.is_test);
+  // The Clients page (Anthony, November 5, 2026): an account
+  // that sees its own root organization alongside client
+  // organizations gets the client fleets on their own page —
+  // the home fleet stays the operator's own. An account that
+  // sees no root organization (a client account) keeps
+  // everything on its one fleet page and never sees a Clients
+  // entry at all.
+  const seesRoot = fleets.some(o => o.is_root_authority);
+  const clientOrgIds = new Set(seesRoot
+    ? fleets.filter(o => !o.is_root_authority).map(o => o.id) : []);
+  const clientsNavBtn = document.getElementById("clientsNavBtn");
+  if (clientsNavBtn) clientsNavBtn.hidden = clientOrgIds.size === 0;
+  // A restored Clients view must never strand an account that
+  // has no client organizations (TA's #87 review): fall back
+  // to the fleet — e.g. the owner viewed Clients, signed out,
+  // and a client account signed in on the same browser.
+  if (clientOrgIds.size === 0 && currentView === "clients") setView("fleet");
   fleets.forEach(org => {
     // Critical alerts (Part 3), organization level: the billing
     // states the account-state read already computes. Part 4
     // counts each company's alerts as they are collected — the
     // count rides the company's summary line.
+    const isClientOrg = clientOrgIds.has(org.id);
     let orgAlerts = 0;
-    const pushAlert = line => { alerts.push(line); orgAlerts++; };
+    const pushAlert = line => { (isClientOrg ? clientAlerts : alerts).push(line); orgAlerts++; };
     const orgState = stateOf[org.id];
     if (orgState === "suspended") {
       pushAlert(esc(orgInitials(org.display_name)) + " — BILLING SUSPENDED");
@@ -1339,7 +1432,6 @@ async function loadFleet(user) {
     }
     const orgUnits = (units || []).filter(u => u.organization_id === org.id);
     const statusWords = [];  // each unit's standing word, for the summary counts
-    const unitSearch = [];   // each unit's label and key, for the search text
     const rows = orgUnits.map(u => {
       const rt = runtimeOf[u.id] || {};
       // The unit's platform seeds the START override, in the
@@ -1357,7 +1449,6 @@ async function loadFleet(user) {
       }
       const st = unitStatusOf(u, rt);
       statusWords.push(st.word);
-      unitSearch.push(labelOf[u.id] || u.unit_key, u.unit_key);
       // Under PLAYING, the session's times ride beneath the
       // entry in the same sub-line style (November 5, 2026) —
       // present only when the phone reported both instants.
@@ -1396,19 +1487,19 @@ async function loadFleet(user) {
       } else if (rt.local_disabled) {
         pushAlert(unitName + " — DISABLED ON THE DEVICE");
       }
-      return "<tr><td>" + esc(labelOf[u.id] || u.unit_key) +
+      return "<tr data-usearch='" + esc((labelOf[u.id] || u.unit_key).toLowerCase()) + "'><td>" + esc(labelOf[u.id] || u.unit_key) +
         "<span id='unitbadge-" + esc(u.id) + "'>" +
           (dis ? "<span class='badge'>DISABLED</span>" : "") + "</span>" +
           (ver && ver.name ? "<div class='ver'>v" + esc(ver.name) + "</div>" : "") + "</td>" +
         "<td id='statuscell-" + esc(u.id) + "'>" + statusHtml + "</td>" +
         "<td class='dim'>" + esc(platLabel(rt.reported_platform || rt.current_platform)) + "</td>" +
         "<td class='dim'>" + esc(lastActivityText(rt)) + "</td></tr>" +
-        "<tr class='ctl-row'><td colspan='4'><div class='ctl'>" +
+        "<tr class='ctl-row' data-usearch='" + esc((labelOf[u.id] || u.unit_key).toLowerCase()) + "'><td colspan='4'><div class='ctl'>" +
         "<span class='seg' data-seg='" + esc(u.id) + "'>" +
           "<button type='button' data-plat='apple_music'" +
-            (plat === "apple_music" ? " class='on'" : "") + ">APPLE MUSIC</button>" +
+            (plat === "apple_music" ? " class='on'" : "") + ">A</button>" +
           "<button type='button' data-plat='youtube'" +
-            (plat === "youtube" ? " class='on'" : "") + ">YOUTUBE</button>" +
+            (plat === "youtube" ? " class='on'" : "") + ">Y</button>" +
         "</span>" +
         "<button type='button' class='ctl-btn" + (dis ? "" : " primary") +
           "' id='startbtn-" + esc(u.id) +
@@ -1490,8 +1581,7 @@ async function loadFleet(user) {
     card.dataset.org = org.id;
     card.dataset.name = orgInitials(org.display_name).toLowerCase();
     card.dataset.search = (String(org.display_name || "") + " " +
-      orgInitials(org.display_name) + " " +
-      unitSearch.join(" ")).toLowerCase();
+      orgInitials(org.display_name)).toLowerCase();
     card.innerHTML =
       "<button type='button' class='org-summary' data-summary='" +
         esc(org.id) + "' aria-expanded='" + (expanded ? "true" : "false") + "'>" +
@@ -1515,7 +1605,7 @@ async function loadFleet(user) {
           ? "<table><tr><th>Unit</th><th>Status</th><th>Platform</th><th>Last activity</th></tr>" + rows + "</table>"
           : "<div class='note'>No units yet.</div>")) +
       "</div>";
-    host.appendChild(card);
+    (isClientOrg ? clientHost : host).appendChild(card);
     renderedOrgs.push(org.id);
     // The company's box on the Playlist Management page (the
     // refinement): the fleet card's own summary/body form,
@@ -1550,12 +1640,17 @@ async function loadFleet(user) {
       alerts.map(a => "<div class='alert-line'>" + a + "</div>").join("");
     alertsHost.hidden = false;
   }
+  if (clientAlerts.length) {
+    clientAlertsHost.innerHTML = "<div class='alert-title'>ALERTS</div>" +
+      clientAlerts.map(a => "<div class='alert-line'>" + a + "</div>").join("");
+    clientAlertsHost.hidden = false;
+  }
   // Control wiring: command buttons send; the segmented
   // control only chooses the platform the next START carries.
-  host.querySelectorAll("[data-cmd]").forEach(btn => {
+  document.querySelectorAll("#orgs [data-cmd], #clientOrgs [data-cmd]").forEach(btn => {
     btn.addEventListener("click", () => sendCommand(btn));
   });
-  host.querySelectorAll("[data-seg]").forEach(seg => {
+  document.querySelectorAll("#orgs [data-seg], #clientOrgs [data-seg]").forEach(seg => {
     seg.querySelectorAll("button").forEach(b => {
       b.addEventListener("click", () => {
         unitPlatform[seg.dataset.seg] = b.dataset.plat;
@@ -1566,10 +1661,10 @@ async function loadFleet(user) {
   });
   // Part 4 wiring: the quiet reset control and the summary
   // lines' expand/collapse.
-  host.querySelectorAll("[data-reset]").forEach(btn => {
+  document.querySelectorAll("#orgs [data-reset], #clientOrgs [data-reset]").forEach(btn => {
     btn.addEventListener("click", () => resetQueue(btn));
   });
-  host.querySelectorAll("[data-summary]").forEach(btn => {
+  document.querySelectorAll("#orgs [data-summary], #clientOrgs [data-summary]").forEach(btn => {
     btn.addEventListener("click", () => toggleOrg(btn.dataset.summary));
   });
   // The refinement's wiring: the playlist page's summary
@@ -1786,6 +1881,7 @@ document.getElementById("rainBtn").addEventListener("click", moneyRain);
 // handler closes the menu behind the choice, as with every
 // item. The choice persists (see setView).
 document.getElementById("fleetNavBtn").addEventListener("click", () => setView("fleet"));
+document.getElementById("clientsNavBtn").addEventListener("click", () => setView("clients"));
 document.getElementById("playlistNavBtn").addEventListener("click", () => setView("playlists"));
 
 // Download the app (Step 9 Part 1, Anthony's design, October 29,
@@ -1869,6 +1965,7 @@ document.getElementById("signoutBtn").addEventListener("click", async () => {
 // Search (Step 7 Part 4): filter companies and units by name
 // as you type.
 document.getElementById("fleetSearch").addEventListener("input", applySearch);
+document.getElementById("clientSearch").addEventListener("input", applySearch);
 boot();
 </script>
 </body>
