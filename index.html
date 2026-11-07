@@ -194,14 +194,16 @@
   /* Usage: the company's own check-in count against its
      allotment — a quiet line and a thin gold bar. */
   .usage { margin-bottom: 14px; }
+  .org-actions { margin-bottom: 14px; }
   .usage-line { font-size: 12.5px; color: var(--secondary); letter-spacing: .04em; }
   .usage-bar { height: 4px; background: #2c2f36; border-radius: 2px; margin-top: 6px; }
   .usage-fill { height: 100%; background: var(--gold); border-radius: 2px; }
   /* Phone grid tidy (Anthony's decision, November 4, 2026):
      at phone width the controls stop wrapping unevenly and
      take an even two-column grid — the platform switch spans
-     the full row, START/STOP share the next, RESTART and
-     DISABLE/ENABLE the next, RESET QUEUE spans beneath — so
+     the full row, START/STOP share the next, NEXT/RESTART
+     the next, UPDATE and DISABLE/ENABLE the next, RESET QUEUE
+     spans beneath — so
      the right edge lines up. Desktop layout is untouched. */
   @media (max-width: 640px) {
     .ctl { display: grid; grid-template-columns: 1fr 1fr; }
@@ -391,8 +393,15 @@ function when(ts) {
 const CMD_LABEL = {
   start_session: "START", stop_session: "STOP",
   restart_runtime: "RESTART", disable_unit: "DISABLE",
-  enable_unit: "ENABLE",
+  enable_unit: "ENABLE", update_now: "UPDATE",
+  restart_session: "RESTART", next_session: "NEXT",
 };
+// Commanded update (November 6, 2026): the units of each
+// company a press of UPDATE ALL would command — those whose
+// reported standing does not already rule an attempt out
+// (failed attempts and unreported standings are eligible;
+// current, working, and waiting are not). Filled at render.
+const updateAllTargets = {};
 let actorId = null;
 const unitPlatform = {};  // unit id -> 'apple_music' | 'youtube' (the START override)
 const sentCmds = {};      // unit id -> {type, state, code} enqueued this session
@@ -794,6 +803,44 @@ function durationWords(ms) {
 // neither: a half-pair is not a fact, and a phone whose build
 // does not report them shows nothing extra (Part 3's leniency,
 // carried to the screen).
+// The last completed session (November 6, 2026): what the unit
+// just left, and when it left it — the fact a waiting unit's row
+// could not state before. Shown whenever the unit is not playing
+// and the phone has reported the pair; a unit whose build does
+// not report it shows nothing extra (the standing leniency).
+function lastSessionText(rt) {
+  const p = rt && rt.last_session_platform;
+  const e = rt && rt.last_session_ended_at;
+  if (!p || !e) return null;
+  const end = new Date(e);
+  if (isNaN(end.getTime())) return null;
+  const clock = d => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return "LAST · " + platLabel(p) + " · ENDED " + clock(end);
+}
+
+// The UPDATE control's standing (November 6, 2026; corrected
+// the same day on TA's review): the label follows the reported
+// standing, but a standing of "current" NEVER disables the
+// control. That standing is the phone's own attempt record —
+// it says no attempt stands, nothing more; it is not evidence
+// the installed build equals the server's current release, so
+// an older unit behind a newly published release must stay
+// commandable or it could never be commanded up to it.
+// Currency is decided by the server at the commanded cycle
+// itself: a unit that truly stands current answers
+// already_current. What disables the control is positive
+// evidence a command cannot help: an attempt under way
+// (UPDATING…), or the install parked on the phone's screen
+// for the operator's tap (WAITING FOR TAP — the one state a
+// command cannot move past).
+function updateBtnState(rt) {
+  const s = rt && rt.update_state;
+  if (s === "working") return { label: "UPDATING…", disabled: true };
+  if (s === "waiting") return { label: "WAITING FOR TAP", disabled: true };
+  if (s === "failed") return { label: "UPDATE — RETRY", disabled: false };
+  return { label: "UPDATE", disabled: false };
+}
+
 function sessionTimesText(rt) {
   const s = rt && rt.session_started_at;
   const e = rt && rt.session_deadline_at;
@@ -813,13 +860,59 @@ function sessionTimesText(rt) {
 // the LOCAL source is named so the two stay distinguishable —
 // the server flag's word is plain DISABLED, matching the badge
 // and the phone's own "disabled from the dashboard" face.
+// The not-playing reason's display (November 6, 2026): the
+// phone's classification of a silent standing session, in the
+// two classes the phone can actually observe — the platform
+// app in front or not in front. Anything else, including no
+// classification (the phone could not observe), renders
+// nothing: an unobserved reason is not claimed here either.
+function musicReasonLabel(reason) {
+  if (reason === "app_closed") return "APP CLOSED";
+  if (reason === "app_open_silent") return "APP OPEN · NO MUSIC";
+  return null;
+}
+
 function unitStatusOf(u, rt) {
   if (u.status !== "active") {
     return { word: String(u.status || "").toUpperCase(), entry: null };
   }
   if (u.operator_disabled) return { word: "DISABLED", entry: null };
   if (rt.local_disabled) return { word: "DISABLED (ON DEVICE)", entry: null };
-  if (rt.conducting) return { word: "PLAYING", entry: rt.current_entry || null };
+  if (rt.conducting) {
+    // The music truth (November 6, 2026): PLAYING means the
+    // MUSIC is playing, not that a session stands. A unit
+    // whose last check-in is beyond the silence threshold has
+    // offered no fact at all for over twenty minutes — the
+    // word must not keep claiming PLAYING on a stale report;
+    // the silence is its own class, and the system cannot
+    // separate a dead phone from a down connection while it
+    // hears nothing.
+    const silentFor = rt.last_checkin_at
+      ? Date.now() - Date.parse(rt.last_checkin_at) : 0;
+    if (silentFor > UNIT_SILENCE_MS) {
+      return { word: "NOT PLAYING", entry: rt.current_entry || null,
+               standing: true,
+               sub: "NO CONTACT — DEAD OR CONNECTION DOWN" };
+    }
+    // The phone's own music fact decides the rest: a reported
+    // silence is NOT PLAYING, with its reason beneath; a
+    // reported sounding fact is PLAYING — the only road to
+    // that word. No current fact — an earlier build that
+    // cannot report one, or a sample the phone could not
+    // take — is UNKNOWN, stated plainly: the session stands,
+    // its music is not reported (TA correction, November 6:
+    // an absent fact claimed as PLAYING would be a false
+    // status under the same ruling that created this word).
+    if (rt.music_active === false) {
+      return { word: "NOT PLAYING", entry: rt.current_entry || null,
+               standing: true, sub: musicReasonLabel(rt.music_reason) };
+    }
+    if (rt.music_active === true) {
+      return { word: "PLAYING", entry: rt.current_entry || null, standing: true };
+    }
+    return { word: "STANDING", entry: rt.current_entry || null,
+             standing: true, sub: "MUSIC NOT REPORTED" };
+  }
   return { word: "READY", entry: null };
 }
 
@@ -1031,6 +1124,26 @@ async function sendCommand(btn) {
     if (cmdId && !CMD_TERMINAL[rec.state]) trackCommand(unitId, cmdId);
   } catch (e) {
     setCmdLine(unitId, "COULD NOT SEND — PLEASE TRY AGAIN", true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// UPDATE ALL (November 6, 2026): command an update attempt on
+// every eligible unit of the company, each through the same
+// send path (and the same per-unit command line and tracking)
+// as its own button. Eligibility was settled at render time by
+// the units' reported standings; the press itself is one loop.
+async function pressUpdateAll(btn) {
+  const targets = updateAllTargets[btn.dataset.updateAll] || [];
+  btn.disabled = true;
+  try {
+    for (const unitId of targets) {
+      await sendCommand({
+        dataset: { unit: unitId, cmd: "update_now" },
+        disabled: false,
+      });
+    }
   } finally {
     btn.disabled = false;
   }
@@ -1255,7 +1368,7 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_checkin_at"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, last_checkin_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
@@ -1451,11 +1564,21 @@ async function loadFleet(user) {
       statusWords.push(st.word);
       // Under PLAYING, the session's times ride beneath the
       // entry in the same sub-line style (November 5, 2026) —
-      // present only when the phone reported both instants.
-      const times = st.word === "PLAYING" ? sessionTimesText(rt) : null;
+      // present only when the phone reported both instants. A
+      // standing session whose music is NOT PLAYING keeps its
+      // entry and its times (the session stands; the music is
+      // the fact that changed), carries its reason as a
+      // sub-line, and does not show the last-session line —
+      // that line belongs to units with no session standing.
+      const times = (st.word === "PLAYING" || st.standing)
+        ? sessionTimesText(rt) : null;
+      const last = (st.word === "PLAYING" || st.standing)
+        ? null : lastSessionText(rt);
       const statusHtml = esc(st.word) +
         (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "") +
-        (times ? "<div class='sub-line'>" + esc(times) + "</div>" : "");
+        (st.sub ? "<div class='sub-line'>" + esc(st.sub) + "</div>" : "") +
+        (times ? "<div class='sub-line'>" + esc(times) + "</div>" : "") +
+        (last ? "<div class='sub-line'>" + esc(last) + "</div>" : "");
       unitStatusHtml[u.id] = statusHtml;
       const ver = versionOf[u.id];
       // Critical alerts (Part 3), unit level — each line names
@@ -1487,6 +1610,15 @@ async function loadFleet(user) {
       } else if (rt.local_disabled) {
         pushAlert(unitName + " — DISABLED ON THE DEVICE");
       }
+      // The music truth alert (November 6, 2026): a standing
+      // session whose phone reports the music is NOT playing
+      // names itself here, with the phone's reason when it
+      // sent one.
+      if (rt.conducting && rt.music_active === false) {
+        const reasonLabel = musicReasonLabel(rt.music_reason);
+        pushAlert(unitName + " — MUSIC NOT PLAYING" +
+          (reasonLabel ? " · " + reasonLabel : ""));
+      }
       return "<tr data-usearch='" + esc((labelOf[u.id] || u.unit_key).toLowerCase()) + "'><td>" + esc(labelOf[u.id] || u.unit_key) +
         "<span id='unitbadge-" + esc(u.id) + "'>" +
           (dis ? "<span class='badge'>DISABLED</span>" : "") + "</span>" +
@@ -1506,8 +1638,12 @@ async function loadFleet(user) {
           "' data-cmd='start_session' data-unit='" + esc(u.id) + "'>START SESSION</button>" +
         "<button type='button' class='ctl-btn' data-cmd='stop_session' data-unit='" +
           esc(u.id) + "'>STOP SESSION</button>" +
-        "<button type='button' class='ctl-btn' data-cmd='restart_runtime' data-unit='" +
-          esc(u.id) + "'>RESTART RUNTIME</button>" +
+        "<button type='button' class='ctl-btn' data-cmd='next_session' data-unit='" +
+          esc(u.id) + "'" + (rt.conducting ? "" : " disabled") + ">NEXT SESSION</button>" +
+        "<button type='button' class='ctl-btn' data-cmd='restart_session' data-unit='" +
+          esc(u.id) + "'" + (rt.conducting ? "" : " disabled") + ">RESTART</button>" +
+        (() => { const ub = updateBtnState(rt); return "<button type='button' class='ctl-btn' data-cmd='update_now' data-unit='" +
+          esc(u.id) + "'" + (ub.disabled ? " disabled" : "") + ">" + ub.label + "</button>"; })() +
         (dis
           ? "<button type='button' class='ctl-btn primary' id='flagbtn-" + esc(u.id) +
               "' data-cmd='enable_unit' data-unit='" +
@@ -1520,6 +1656,9 @@ async function loadFleet(user) {
         "</div><div class='cmd-line' id='cmd-" + esc(u.id) + "'>" +
           esc(cmdLineText(cmd)) + "</div></td></tr>";
     }).join("");
+    updateAllTargets[org.id] = orgUnits
+      .filter(u => !updateBtnState(runtimeOf[u.id]).disabled)
+      .map(u => u.id);
     const period = periodOf[org.id];
     const billing = org.is_root_authority
       ? "Owner organization — not billed"
@@ -1599,6 +1738,10 @@ async function loadFleet(user) {
           : (noticeCount[org.id] ? " · Unsent notices: " + noticeCount[org.id] : "")) +
       "</div>" +
       usageHtml +
+      "<div class='org-actions'><button type='button' class='ctl-btn' data-update-all='" +
+        esc(org.id) + "'" +
+        (updateAllTargets[org.id].length ? "" : " disabled") +
+        ">UPDATE ALL</button></div>" +
       (unitsFailed
         ? "<div class='note'>Units unavailable — the units read failed.</div>"
         : (rows
@@ -1649,6 +1792,9 @@ async function loadFleet(user) {
   // control only chooses the platform the next START carries.
   document.querySelectorAll("#orgs [data-cmd], #clientOrgs [data-cmd]").forEach(btn => {
     btn.addEventListener("click", () => sendCommand(btn));
+  });
+  document.querySelectorAll("#orgs [data-update-all], #clientOrgs [data-update-all]").forEach(btn => {
+    btn.addEventListener("click", () => pressUpdateAll(btn));
   });
   document.querySelectorAll("#orgs [data-seg], #clientOrgs [data-seg]").forEach(seg => {
     seg.querySelectorAll("button").forEach(b => {
