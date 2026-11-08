@@ -222,6 +222,7 @@
      .cmd-line. */
   .pl { margin-top: 18px; border-top: 1px solid #2c2f36; padding-top: 14px; }
   .pl-head { font-size: 12.5px; color: var(--secondary); letter-spacing: .04em; }
+  .pl-note { color: var(--hint); font-size: 13px; letter-spacing: .04em; margin-top: 12px; }
   .pl-plat { color: var(--hint); font-size: 12px; font-weight: 700; letter-spacing: .08em; margin-top: 12px; }
   .pl-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14px; }
   .pl-name { flex: 1; }
@@ -395,6 +396,7 @@ const CMD_LABEL = {
   restart_runtime: "RESTART", disable_unit: "DISABLE",
   enable_unit: "ENABLE", update_now: "UPDATE",
   restart_session: "RESTART", next_session: "NEXT",
+  report_now: "REPORT",
 };
 // Commanded update (November 6, 2026): the units of each
 // company a press of UPDATE ALL would command — those whose
@@ -541,12 +543,11 @@ function togglePlOrg(orgId) {
 // playlist markup at all. The catalog lives in the back end
 // (eps.playlist_entries); this section renders each company's
 // ACTIVE entries from the account's scoped table read, and
-// its two writes are the catalog definers over the Data API
-// with the signed-in session: eps.add_playlist_entry (Apple
-// takes the playlist link alone — the entry's name derives
-// server-side; YouTube takes the playlist link, one video
-// link from inside it, and a name — the watch link is composed
-// server-side, never here) and eps.retire_playlist_entry.
+// its writes are the catalog definers over the Data API with
+// the signed-in session: eps.add_playlist_entry (YouTube
+// takes the playlist link, one video link from inside it,
+// and a name — the watch link is composed server-side, never
+// here) and eps.retire_playlist_entry.
 // Neither definer takes an actor: authorization resolves
 // from this page's verified session inside the definer (the
 // organization must stand in the account's visible set;
@@ -557,6 +558,14 @@ function togglePlOrg(orgId) {
 // Phones receive changes at their next check-in; nothing here
 // pretends otherwise. REMOVE confirms inline, like the queue
 // reset: the button itself asks CONFIRM REMOVE? first.
+//
+// Per-unit A pools (Anthony, November 7, 2026): A playlist
+// administration ended here the day the back end retired the
+// organization A entries. Each unit carries its OWN seven A
+// playlist links, entered in the app on the unit — there is
+// nothing A to administer from this page, and the section
+// says so in one line where the A intake stood. What remains
+// administered here is Y alone, exactly as before.
 const playlistOf = {};     // org id -> active entries [{id, platform, number, name}] in pool order
 const plRemoveTimers = {}; // entry id -> the confirm state's revert timer
 
@@ -575,18 +584,18 @@ function playlistErrorLine(code) {
   return "COULD NOT SAVE — PLEASE TRY AGAIN";
 }
 
-// The per-platform counts line, shared by the section's own
-// heading and its box's summary line on the playlist page.
+// The Y count line, shared by the section's own heading and
+// its box's summary line on the playlist page. (The A count
+// retired with the A entries, November 7, 2026: A playlists
+// live on each unit and are counted nowhere here.)
 function plCountsText(orgId) {
   const entries = playlistOf[orgId] || [];
-  const apple = entries.filter(e => e.platform === "apple_music").length;
   const yt = entries.filter(e => e.platform === "youtube").length;
-  return apple + " A · " + yt + " Y";
+  return yt + " Y";
 }
 
 function playlistsHtml(orgId) {
   const entries = playlistOf[orgId] || [];
-  const apple = entries.filter(e => e.platform === "apple_music");
   const yt = entries.filter(e => e.platform === "youtube");
   const lines = list => list.map(e =>
     "<div class='pl-row'><span class='pl-name'>" + esc(e.number) +
@@ -596,14 +605,7 @@ function playlistsHtml(orgId) {
   ).join("");
   return "<div class='pl'><div class='pl-head'>PLAYLISTS — " +
     plCountsText(orgId) + "</div>" +
-    "<div class='pl-plat'>A</div>" + lines(apple) +
-    "<div class='pl-form'>" +
-    "<input id='pl-apple-link-" + esc(orgId) + "' type='text' " +
-      "placeholder='PLAYLIST LINK' aria-label='A playlist link'>" +
-    "<input id='pl-apple-name-" + esc(orgId) + "' type='text' " +
-      "placeholder='NAME' aria-label='A playlist name'>" +
-    "<button type='button' class='ctl-btn' data-pladd='apple_music' " +
-      "data-org='" + esc(orgId) + "'>ADD</button></div>" +
+    "<div class='pl-note'>A PLAYLISTS LIVE ON EACH UNIT</div>" +
     "<div class='pl-plat'>Y</div>" + lines(yt) +
     "<div class='pl-form'>" +
     "<input id='pl-yt-link-" + esc(orgId) + "' type='text' " +
@@ -660,47 +662,30 @@ async function refreshPlaylists(orgId) {
 
 async function addPlaylist(btn) {
   const orgId = btn.dataset.org;
-  const platform = btn.dataset.pladd;
   if (!actorId) {
     setPlLine(orgId, "SIGN-IN EXPIRED — RELOAD THE PAGE", true);
     return;
   }
-  let args;
-  if (platform === "apple_music") {
-    const linkEl = document.getElementById("pl-apple-link-" + orgId);
-    const link = ((linkEl && linkEl.value) || "").trim();
-    if (!link) {
-      setPlLine(orgId, "PASTE THE PLAYLIST LINK FIRST", true);
-      return;
-    }
-    // The name slot stands for Apple too (Anthony, November 4,
-    // 2026): a name given here is the entry's name; left blank,
-    // the server still derives one from the link, as before.
-    const nameEl = document.getElementById("pl-apple-name-" + orgId);
-    const name = ((nameEl && nameEl.value) || "").trim();
-    args = {
-      p_organization_id: orgId,
-      p_platform: "apple_music", p_playlist_url: link,
-      p_video_url: null, p_name: name || null,
-    };
-  } else {
-    const field = id => {
-      const el = document.getElementById(id);
-      return ((el && el.value) || "").trim();
-    };
-    const link = field("pl-yt-link-" + orgId);
-    const video = field("pl-yt-video-" + orgId);
-    const name = field("pl-yt-name-" + orgId);
-    if (!link || !video || !name) {
-      setPlLine(orgId, "FILL IN ALL THREE FIELDS FIRST", true);
-      return;
-    }
-    args = {
-      p_organization_id: orgId,
-      p_platform: "youtube", p_playlist_url: link,
-      p_video_url: video, p_name: name,
-    };
+  // Y is the one administered platform (November 7, 2026):
+  // the playlist link, one video link from inside it, and a
+  // name — all three required, the watch link composed
+  // server-side.
+  const field = id => {
+    const el = document.getElementById(id);
+    return ((el && el.value) || "").trim();
+  };
+  const link = field("pl-yt-link-" + orgId);
+  const video = field("pl-yt-video-" + orgId);
+  const name = field("pl-yt-name-" + orgId);
+  if (!link || !video || !name) {
+    setPlLine(orgId, "FILL IN ALL THREE FIELDS FIRST", true);
+    return;
   }
+  const args = {
+    p_organization_id: orgId,
+    p_platform: "youtube", p_playlist_url: link,
+    p_video_url: video, p_name: name,
+  };
   btn.disabled = true;
   try {
     const { data, error } = await eps().rpc("add_playlist_entry", args);
@@ -870,6 +855,60 @@ function musicReasonLabel(reason) {
   if (reason === "app_closed") return "APP CLOSED";
   if (reason === "app_open_silent") return "APP OPEN · NO MUSIC";
   return null;
+}
+
+// The last launch-dispatch failure, in plain words
+// (visibility build). The fact rides the runtime report
+// (category + press identity + instant) under the
+// restated-or-cleared rule; the line renders while it stands
+// and is gone when a successful dispatch clears it. The press
+// identity reads: the line names the press that failed and
+// how, in the music reason's family. A category outside the
+// known vocabulary renders no line (nothing rendered is
+// better than a guessed word).
+const DISPATCH_CATEGORY_LABEL = {
+  MALFORMED_URL: "BAD LINK",
+  PACKAGE_MISSING: "APP MISSING",
+  INTENT_UNRESOLVABLE: "COULD NOT OPEN",
+  DISPATCH_EXCEPTION: "PRESS FAILED",
+  ACCESSIBILITY_UNAVAILABLE: "ASSISTANT OFF",
+  FOREGROUND_PACKAGE_MISMATCH: "APP NOT IN FRONT",
+  TARGET_NOT_FOUND: "PRESS TARGET NOT FOUND",
+  TARGET_AMBIGUOUS: "PRESS TARGET UNCLEAR",
+  CLICK_FAILED: "PRESS DID NOT LAND",
+  MEDIA_DISPATCH_FAILED: "PLAY PRESS FAILED",
+  GLOBAL_ACTION_REJECTED: "ACTION REFUSED",
+  NO_DEVICE_OPERATION: "NO PRESS SENT",
+};
+
+function dispatchFailureLabel(rt) {
+  if (!rt || !rt.dispatch_category) return null;
+  const cat = DISPATCH_CATEGORY_LABEL[rt.dispatch_category];
+  if (!cat) return null;
+  const id = String(rt.dispatch_action || "");
+  let act = "";
+  if (id.indexOf(":shuffle:") >= 0) act = "SHUFFLE PRESS";
+  else if (id.indexOf(":play:") >= 0) act = "PLAY PRESS";
+  else if (id) act = "PRESS";
+  return (act ? act + " · " : "") + cat;
+}
+
+// The live window (visibility build): while a unit's window
+// stands, answers land in under a minute; outside one, a
+// command's first hop rides the unit's next check-in. The
+// note says which is true — honestly, in the standing line's
+// own family (the same clock the LAST ACTIVITY line uses).
+function liveWindowNote(rt) {
+  if (rt && rt.live_until &&
+      new Date(rt.live_until).getTime() > Date.now()) {
+    return "LIVE · ANSWERS IN UNDER A MINUTE";
+  }
+  if (rt && rt.last_checkin_at) {
+    const clock = d => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return "ANSWERS AT THE NEXT CHECK-IN · " +
+      clock(new Date(rt.last_checkin_at));
+  }
+  return "ANSWERS AT THE NEXT CHECK-IN";
 }
 
 function unitStatusOf(u, rt) {
@@ -1368,7 +1407,7 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, last_checkin_at"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
@@ -1574,9 +1613,15 @@ async function loadFleet(user) {
         ? sessionTimesText(rt) : null;
       const last = (st.word === "PLAYING" || st.standing)
         ? null : lastSessionText(rt);
+      // The last launch-dispatch failure (visibility build):
+      // the same position family as the music reason — a
+      // sub-line under the unit's state, in plain words, shown
+      // while the triple stands and gone when it clears.
+      const df = dispatchFailureLabel(rt);
       const statusHtml = esc(st.word) +
         (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "") +
         (st.sub ? "<div class='sub-line'>" + esc(st.sub) + "</div>" : "") +
+        (df ? "<div class='sub-line'>" + esc(df) + "</div>" : "") +
         (times ? "<div class='sub-line'>" + esc(times) + "</div>" : "") +
         (last ? "<div class='sub-line'>" + esc(last) + "</div>" : "");
       unitStatusHtml[u.id] = statusHtml;
@@ -1653,8 +1698,15 @@ async function loadFleet(user) {
               esc(u.id) + "'>DISABLE UNIT</button>") +
         "<button type='button' class='ctl-btn quiet reset' id='resetbtn-" +
           esc(u.id) + "' data-reset='" + esc(u.id) + "'>RESET QUEUE</button>" +
+        // REPORT NOW (visibility build): asks the unit to
+        // report at once. The queue line beneath it names the
+        // honest expectation — inside a live window the answer
+        // lands in under a minute; outside one the request
+        // rides the unit's next check-in.
+        "<button type='button' class='ctl-btn' data-cmd='report_now' data-unit='" +
+          esc(u.id) + "'>REPORT NOW</button>" +
         "</div><div class='cmd-line' id='cmd-" + esc(u.id) + "'>" +
-          esc(cmdLineText(cmd)) + "</div></td></tr>";
+          esc(cmdLineText(cmd) || liveWindowNote(rt)) + "</div></td></tr>";
     }).join("");
     updateAllTargets[org.id] = orgUnits
       .filter(u => !updateBtnState(runtimeOf[u.id]).disabled)
