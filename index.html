@@ -198,18 +198,25 @@
   .usage-line { font-size: 12.5px; color: var(--secondary); letter-spacing: .04em; }
   .usage-bar { height: 4px; background: #2c2f36; border-radius: 2px; margin-top: 6px; }
   .usage-fill { height: 100%; background: var(--gold); border-radius: 2px; }
-  /* Phone grid tidy (Anthony's decision, November 4, 2026):
-     at phone width the controls stop wrapping unevenly and
-     take an even two-column grid — the platform switch spans
-     the full row, START/STOP share the next, NEXT/RESTART
-     the next, UPDATE and DISABLE/ENABLE the next, RESET QUEUE
-     spans beneath — so
-     the right edge lines up. Desktop layout is untouched. */
+  /* Phone grid tidy (Anthony's decision, November 4, 2026;
+     stack order and the two-button nudge surface completed
+     by his rulings of November 8, 2026): at phone width the
+     controls stop wrapping unevenly and take an even
+     two-column grid — the platform switch spans the full
+     row, START/STOP share the next, NEXT/RESTART the next,
+     SHUFFLE/PLAY the next (two distinct buttons, each live
+     only on its own platform), UPDATE and DISABLE-or-ENABLE
+     the next, REPORT NOW spans its own row, and RESET QUEUE
+     spans beneath, LAST in the stack always — so every row
+     is a clean pair or full width, the right edge lines up,
+     and the stack reads as one pyramid. Desktop layout is
+     untouched. */
   @media (max-width: 640px) {
     .ctl { display: grid; grid-template-columns: 1fr 1fr; }
     .ctl .seg { grid-column: 1 / -1; display: flex; }
     .ctl .seg button { flex: 1; }
     .ctl-btn { width: 100%; }
+    .ctl-btn.wide { grid-column: 1 / -1; }
     .ctl-btn.reset { grid-column: 1 / -1; }
   }
   /* Playlists (Step 3 remainder; moved to the Playlist
@@ -827,22 +834,26 @@ function updateBtnState(rt) {
   return { label: "UPDATE", disabled: false };
 }
 
-// SHUFFLE / PLAY nudge (piece 6, November 8, 2026): the label
-// and the command follow the session the unit is CONDUCTING —
-// on an Apple session the nudge is the shuffle press (which
-// also starts playback), on a YouTube session the play press
-// (a YouTube shuffle only reorders). Enablement mirrors
-// RESTART/NEXT: live only while conducting; the resting label
-// is the Apple word, since a non-conducting unit has no
-// standing platform to name one after.
-function nudgeBtnState(rt) {
-  if (rt && rt.conducting && rt.current_platform === "youtube") {
-    return { cmd: "play_now", label: "PLAY", disabled: false };
-  }
-  if (rt && rt.conducting && rt.current_platform === "apple_music") {
-    return { cmd: "shuffle_now", label: "SHUFFLE", disabled: false };
-  }
-  return { cmd: "shuffle_now", label: "SHUFFLE", disabled: true };
+// SHUFFLE and PLAY nudges (piece 6, November 8, 2026; the
+// two-button surface is Anthony's correction of the same
+// day — he directed two distinct buttons, not one whose
+// label switches): the platforms answer different presses.
+// On Apple, SHUFFLE starts the playlist actually on screen
+// (a play press would resume the previous playlist/context
+// instead); on YouTube, PLAY starts playback (its shuffle
+// only reorders). So each button stands on its own, live
+// only on its own platform's standing session — SHUFFLE
+// while conducting Apple, PLAY while conducting YouTube —
+// and both stand disabled otherwise: the honest
+// applicability the phone enforces regardless of the surface.
+function nudgeBtnStates(rt) {
+  const plat = rt && rt.conducting ? rt.current_platform : null;
+  return {
+    shuffle: { cmd: "shuffle_now", label: "SHUFFLE",
+      disabled: plat !== "apple_music" },
+    play: { cmd: "play_now", label: "PLAY",
+      disabled: plat !== "youtube" },
+  };
 }
 
 function sessionTimesText(rt) {
@@ -1706,8 +1717,10 @@ async function loadFleet(user) {
           esc(u.id) + "'" + (rt.conducting ? "" : " disabled") + ">NEXT SESSION</button>" +
         "<button type='button' class='ctl-btn' data-cmd='restart_session' data-unit='" +
           esc(u.id) + "'" + (rt.conducting ? "" : " disabled") + ">RESTART</button>" +
-        (() => { const nb = nudgeBtnState(rt); return "<button type='button' class='ctl-btn' data-cmd='" + nb.cmd +
-          "' data-unit='" + esc(u.id) + "'" + (nb.disabled ? " disabled" : "") + ">" + nb.label + "</button>"; })() +
+        (() => { const nb = nudgeBtnStates(rt); return "<button type='button' class='ctl-btn' data-cmd='" + nb.shuffle.cmd +
+          "' data-unit='" + esc(u.id) + "'" + (nb.shuffle.disabled ? " disabled" : "") + ">" + nb.shuffle.label + "</button>" +
+          "<button type='button' class='ctl-btn' data-cmd='" + nb.play.cmd +
+          "' data-unit='" + esc(u.id) + "'" + (nb.play.disabled ? " disabled" : "") + ">" + nb.play.label + "</button>"; })() +
         (() => { const ub = updateBtnState(rt); return "<button type='button' class='ctl-btn' data-cmd='update_now' data-unit='" +
           esc(u.id) + "'" + (ub.disabled ? " disabled" : "") + ">" + ub.label + "</button>"; })() +
         (dis
@@ -1717,15 +1730,21 @@ async function loadFleet(user) {
           : "<button type='button' class='ctl-btn' id='flagbtn-" + esc(u.id) +
               "' data-cmd='disable_unit' data-unit='" +
               esc(u.id) + "'>DISABLE UNIT</button>") +
-        "<button type='button' class='ctl-btn quiet reset' id='resetbtn-" +
-          esc(u.id) + "' data-reset='" + esc(u.id) + "'>RESET QUEUE</button>" +
         // REPORT NOW (visibility build): asks the unit to
         // report at once. The queue line beneath it names the
         // honest expectation — inside a live window the answer
         // lands in under a minute; outside one the request
-        // rides the unit's next check-in.
-        "<button type='button' class='ctl-btn' data-cmd='report_now' data-unit='" +
+        // rides the unit's next check-in. It spans its own
+        // full row (the .wide cell), beneath the paired rows,
+        // so no row of the stack hangs half-empty.
+        "<button type='button' class='ctl-btn wide' data-cmd='report_now' data-unit='" +
           esc(u.id) + "'>REPORT NOW</button>" +
+        // RESET QUEUE stands LAST in the stack, always
+        // (Anthony's ruling, November 8, 2026): the bottom of
+        // the pyramid, beneath every paired row, in every
+        // state the unit renders.
+        "<button type='button' class='ctl-btn quiet reset' id='resetbtn-" +
+          esc(u.id) + "' data-reset='" + esc(u.id) + "'>RESET QUEUE</button>" +
         "</div><div class='cmd-line' id='cmd-" + esc(u.id) + "'>" +
           esc(cmdLineText(cmd) || liveWindowNote(rt)) + "</div></td></tr>";
     }).join("");
