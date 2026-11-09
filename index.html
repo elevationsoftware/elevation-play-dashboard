@@ -36,6 +36,30 @@
     background: var(--surface); border: 1px solid var(--outline);
     border-radius: 10px; padding: 24px; margin-bottom: 24px;
   }
+  /* Agreement front door (first-time account setup): the
+     agreement text stands in its own scroll region on the
+     page background, the two answer controls at the very end
+     of the text — the standard license pattern. */
+  .agreement-scroll {
+    max-height: 46vh; overflow-y: auto; margin-top: 14px;
+    border: 1px solid var(--outline); border-radius: 10px;
+    padding: 18px 20px; background: var(--bg);
+  }
+  .agreement-title {
+    font-size: 16px; font-weight: 700; letter-spacing: .06em;
+    color: var(--text); margin-bottom: 4px;
+  }
+  .agreement-scroll h3 {
+    font-size: 14px; letter-spacing: .06em; color: var(--text);
+    margin: 20px 0 6px;
+  }
+  .agreement-scroll p {
+    font-size: 14px; line-height: 1.55; color: var(--secondary);
+    margin: 8px 0;
+  }
+  .agreement-actions { display: flex; gap: 10px; margin-top: 22px; }
+  .agreement-actions button { margin-top: 0; }
+  .agreement-actions button.ghost { margin-top: 0; }
   label { display: block; font-size: 13px; color: var(--secondary); margin: 14px 0 6px; }
   input {
     width: 100%; padding: 10px 12px; border-radius: 6px;
@@ -279,6 +303,112 @@
     <div id="signinErr" class="err"></div>
   </div>
 
+  <div id="frontdoor" class="card" hidden>
+    <div class="view-head">EPS LICENSE AGREEMENT — VERSION 1.0</div>
+    <p class="note">Account setup begins with the license agreement. It stands in full below. ACCEPT records acceptance for your organization and setup continues. REJECT ends setup.</p>
+    <div id="agreementScroll" class="agreement-scroll" tabindex="0">
+<!-- AGREEMENT TEXT: generated from the permanent record by eps-front-door/extract_agreement.mjs — do not hand-edit. -->
+<div class="agreement-title">EPS 2.0 LICENSE AGREEMENT</div>
+<h3>Section 1 — Parties, Acceptance, Scope and License Grant</h3>
+<p class="clause" data-clause="1.1">1.1 Parties. This Elevation Play Software 2.0 License Agreement (“Agreement”) is between Elevation Software LLC (“Elevation” or “Licensor”) and Tizle Software LLC (“Tizle” or “Licensee”).</p>
+<p class="clause" data-clause="1.2">1.2 Authorized Acceptance and Effective Date. Breante Glover, acting as Tizle's authorized representative, accepts this Agreement for Tizle through its Elevation-provisioned client dashboard account. The Agreement becomes effective when the representative affirmatively accepts the presented version during initial account setup (“Effective Date”). Elevation records the accepting account identity, agreement version, and acceptance date and time. Setup cannot proceed until that affirmative acceptance occurs.</p>
+<p class="clause" data-clause="1.3">1.3 Limited License. Subject to Tizle's compliance with this Agreement and payment of applicable charges, Elevation grants Tizle a limited, nonexclusive, nontransferable, nonsublicensable, revocable license during the Agreement term to use the EPS 2.0 Android application, hosted client dashboard, and associated services solely to operate and manage Tizle's own authorized fleet. Elevation provisions the client organization account and a company-specific installation code for authorized devices. Device-count bands determine monthly license pricing and do not themselves restrict the number of activations.</p>
+<p class="clause" data-clause="1.4">1.4 Permitted Functionality and Access Boundaries. Tizle may use its organization-scoped dashboard to control its own fleet and sessions, manage its own playlist catalog, view its own usage, and receive updates Elevation makes available during the license term. Elevation administers the underlying backend, database, infrastructure, platform and owner controls. This Agreement grants Tizle no source-code access, direct database or backend access, owner-administrator access, resale rights, sublicensing rights, or ownership in EPS.</p>
+<p class="clause" data-clause="1.5">1.5 Ownership and Client Materials. Elevation retains all rights in EPS software, architecture, source code, platform systems, and associated intellectual property, subject to rights of any third-party licensors. Tizle retains ownership of its playlist entries, catalog information and business records. Tizle authorizes Elevation to host, process and display Tizle-entered information as reasonably necessary to deliver and administer the licensed service. The Agreement's later data provisions will address relevant service records and retention; this section does not promise a data-export function.</p>
+<p class="clause" data-clause="1.6">1.6 Organization-Level Agreement. Acceptance occurs at Tizle's client dashboard account setup rather than separately in each Android application. Elevation's owner-operated fleet is outside this client license and requires no Tizle acceptance. Tizle may not transfer this license or grant access to another organization without Elevation's prior written permission.</p>
+<h3>SECTION 2 — AUTHORIZED USE, CREDENTIALS AND DEVICE ACCESS</h3>
+<p class="clause" data-clause="2.1">2.1 Authorized Account. Elevation provisions Tizle's organization account; public registration is not available. The initial license includes one designated client dashboard account, which may operate only within Tizle's organization. Additional accounts are not included. Tizle may request one with a specific business justification, but Elevation may approve or refuse in its discretion and may condition an approved additional account on a separately disclosed charge and applicable access terms. No additional account is promised by this Agreement.</p>
+<p class="clause" data-clause="2.2">2.2 Credentials and Security. Tizle's designated account holder establishes and maintains their own password using the account-email setup or recovery process. Tizle is responsible for safeguarding account credentials, keeping its account email accessible, and notifying Elevation promptly of suspected unauthorized access. Tizle must not share credentials with another organization or allow access outside the licensed organization. No contractual promise of MFA is made.</p>
+<p class="clause" data-clause="2.3">2.3 Device Authorization. Elevation provides an organization-specific installation code to authorize EPS on Tizle devices. The code may be reused for authorized Tizle installations and must be kept confidential. Devices use distinct D-number labels within Tizle's fleet. The reserved ROOT label is not available to Tizle. Device-count bands affect charges rather than imposing a fixed technical activation cap. Retirement, replacement, and reinstallation remain subject to Elevation's applicable authorization procedures.</p>
+<p class="clause" data-clause="2.4">2.4 Permitted Operations. Through its client dashboard Tizle may manage its own EPS sessions, devices, device enable/disable state, playlist entries and usage information, subject to the features and permissions Elevation makes available. Tizle has no permission to administer, view, control, or interfere with another organization's accounts, fleet, catalog, or usage.</p>
+<p class="clause" data-clause="2.5">2.5 Updates and Service Status. Elevation controls the release and distribution of EPS updates. Tizle may receive updates under Elevation's delivery process. During a license suspension, device operation is disabled when each affected device next successfully communicates with the service; devices that remain offline may not receive that decision until reconnection. Suspension does not itself transfer ownership of client materials or delete the client organization record. Revocation may end dashboard access as addressed in later termination provisions.</p>
+<p class="clause" data-clause="2.6">2.6 Use Restrictions. Tizle may use EPS solely for its own authorized business fleet. It may not sublicense, resell, transfer, share installation credentials with another organization, circumvent access restrictions, or operate EPS as a service for a third party without Elevation's prior written permission.</p>
+<h3>SECTION 3 — FEES, INVOICING, PAYMENT AND SUSPENSION</h3>
+<p class="clause" data-clause="3.1">3.1 License Fee and Device Bands. Tizle shall pay a monthly EPS license fee based on the number of registered, non-retired devices in Tizle's organization fleet at the end of the calendar month being billed, measured in America/New_York. Temporarily disabled devices count; devices formally retired or released before that month-end do not. The monthly license fee is $5 for 1–24 devices; $10 for 25–49; $15 for 50–74; $20 for 75–99; $25 for 100–124; and an additional $5 for each further 25-device band. These bands determine price and do not impose a technical device activation cap. Elevation determines the applicable band when preparing the invoice using the fleet's recorded registration and retirement history.</p>
+<p class="clause" data-clause="3.2">3.2 Usage Charge. In addition to the license fee, Tizle shall pay an initial usage charge of $12.50 per month, beginning with its first month of service, reflecting its allocated share of Elevation's Supabase Pro infrastructure cost. Elevation may change the usage charge by giving Tizle at least thirty (30) days' advance written notice, with the revised amount applying no earlier than the first full service calendar month beginning after that notice period. No usage overage charge is imposed under this Agreement unless the parties separately agree in writing to one.</p>
+<p class="clause" data-clause="3.3">3.3 One-Time Activation Fee. Tizle shall pay a one-time $9 organization activation fee on its first invoice. This fee is not repeated for the same organization. Any separately approved additional dashboard account and associated disclosed charge are governed by Section 2.1 and are not a repeat of the activation fee.</p>
+<p class="clause" data-clause="3.4">3.4 Monthly Invoicing. Elevation invoices once per month in arrears for whole calendar months of service, without proration. Elevation manually issues one combined invoice through Mercury on the 21st of the month following the service month, due on the 28th of that invoice month. The first invoice is issued on the 21st of the month following first use and includes the activation fee, the applicable first-month license fee, and the usage charge. At the initial 1–24-device band and initial usage rate, the first invoice is $26.50 and a later monthly invoice without activation is $17.50, subject to any applicable fee-band or usage-charge changes under this Agreement. EPS itself does not issue invoices.</p>
+<p class="clause" data-clause="3.5">3.5 Payment and Recognition. Tizle must pay each invoice in full by the end of the 28th calendar day of the invoice month, measured in America/New_York (Eastern Time, including daylight-saving transitions). Payment is recognized for EPS entitlement purposes only when the corresponding Mercury invoice reflects Paid status for the invoiced amount; a Processing status does not constitute recognized payment. Elevation may send payment-related notices through its service and account channels.</p>
+<p class="clause" data-clause="3.6">3.6 Nonpayment and Suspension. If an invoice remains unpaid 48 elapsed hours after the end of its due date, Elevation may suspend Tizle's EPS service. The suspension cutoff is computed using the governing America/New_York timezone. Suspension takes effect for each device when it next successfully communicates with the service; devices that remain offline may not receive the suspension instruction until reconnection. Suspension prevents new EPS sessions and ends affected sessions on successful check-in, but does not itself delete Tizle's organization record or transfer ownership of Tizle materials. No late fee or interest is imposed under the current Agreement.</p>
+<p class="clause" data-clause="3.7">3.7 Restoration. Once the relevant Mercury invoice is recognized as Paid, EPS restores the organization's entitlement automatically, with affected devices resuming eligibility at their next successful check-in. A pending or processing payment does not itself restore service. This section does not limit other rights of suspension or termination provided elsewhere in this Agreement.</p>
+<h3>SECTION 4 — SERVICE AVAILABILITY, SUPPORT AND MAINTENANCE</h3>
+<p class="clause" data-clause="4.1">4.1 Online Service and Client Environment. EPS is an internet-connected service using a hosted dashboard and network communications for device check-ins, commands, updates, usage information and license status. Tizle is responsible for providing and maintaining its own devices, connectivity, VPN and access to any third-party playback applications used with EPS. Elevation does not undertake to operate Tizle's fleet or ensure that Tizle's devices are playing at any given time.</p>
+<p class="clause" data-clause="4.2">4.2 Availability and Third-Party Dependencies. Elevation provides EPS on an as-available basis without a guaranteed uptime percentage, uninterrupted availability, or specified response or repair time. Service operation may be affected by hosting providers, internet networks, Android and other operating-system changes, and third-party playback applications outside Elevation's control. Elevation may undertake maintenance or modify the service to address technical and platform changes.</p>
+<p class="clause" data-clause="4.3">4.3 Device Communication and Deferred Actions. Device commands and service-state changes depend on successful communication. A device that is offline or cannot reach the service may not receive a command, update, suspension or restoration until its next successful check-in. An unanswered check-in alone is not a suspension or revocation instruction and does not by itself end an already-running session. These communication behaviors do not guarantee continued operation of third-party playback services.</p>
+<p class="clause" data-clause="4.4">4.4 Technical Support. Elevation provides support on a best-efforts basis for genuine EPS application or licensing problems, billing and payment issues, and EPS functionality. Elevation does not promise a response deadline, resolution deadline, or continuous support coverage. Tizle remains responsible for its own fleet deployment, operation, device conditions, connectivity and playback activity. Elevation will designate the available support submission channel at onboarding and may provide an in-account support facility when available. No presently unbuilt support feature is represented as already operating.</p>
+<p class="clause" data-clause="4.5">4.5 Updates and Maintenance. Elevation determines the timing, contents and delivery of EPS updates and may provide updates through its controlled release process. No fixed update schedule is promised. Applying an installed update restarts the EPS application and ends any active session, after which a new start command is required. Tizle is responsible for enabling required Android installation permissions and maintaining device compatibility and connectivity necessary to receive updates.</p>
+<h3>SECTION 5 — DATA HANDLING, CONFIDENTIALITY AND RECORDS</h3>
+<p class="clause" data-clause="5.1">5.1 Hosted Service Records. In providing EPS, Elevation hosts and processes Tizle's organization and designated account information; billing profile, invoice recognition and entitlement information; device registrations, labels, runtime and command/update states; Tizle-entered hosted playlist catalog entries; and service usage records. Support descriptions and screenshots may be processed if Tizle submits them through an available support channel. Apple playlist links stored solely on Tizle devices are not part of Elevation's hosted catalog. Device verification uses public signing-key material; private device keys remain on devices.</p>
+<p class="clause" data-clause="5.2">5.2 Ownership and Authorized Processing. Tizle retains ownership of its entered playlist catalog and business records, as in Section 1.5. Elevation retains ownership and control of EPS software, infrastructure and its service-operational records, including device, command, entitlement, usage and billing-state records. Tizle authorizes Elevation and its service providers to host, access, process and transmit information as reasonably needed to operate, maintain, secure, bill and support EPS and administer this Agreement. Tizle has no direct database, backend or owner-administrator access.</p>
+<p class="clause" data-clause="5.3">5.3 Confidentiality and Access. Each party shall use reasonable care to protect the other party's nonpublic business information received through the licensed relationship and shall not disclose it except as reasonably required to perform this Agreement, to professional advisers subject to confidentiality duties, or as required by law. Elevation may grant its authorized personnel and necessary infrastructure, payment and email service providers access to client data for the purposes described in Section 5.2. This provision does not restrict information that is publicly available without breach, already lawfully known, independently developed, or lawfully received from another source.</p>
+<p class="clause" data-clause="5.4">5.4 Security Practices. Elevation uses access controls and technical measures appropriate to the hosted EPS service, including organization-scoped authorization, authenticated communications and protected account credentials. Tizle is responsible for safeguarding its own credentials, devices and connectivity, as stated in Sections 2 and 4. No absolute security guarantee is made.</p>
+<p class="clause" data-clause="5.5">5.5 Records, Retention and Export. Device registration and retirement history, billing and usage information and other service records may be retained as part of Elevation's operational and accounting records. Suspension alone does not delete records. EPS does not provide a client self-service export feature or guarantee a downloadable data export. Post-termination retention, access and deletion are addressed in Section 6 and remain subject to an explicit owner policy decision before finalization.</p>
+<p class="clause" data-clause="5.6">5.6 Incident Handling. Elevation may investigate suspected unauthorized access or security incidents affecting EPS and take appropriate protective measures. Any legally required notifications will be provided as required by applicable law. No separate contractual notification deadline is promised by this clause.</p>
+<h3>SECTION 6 — TERM, TERMINATION AND POST-TERMINATION EFFECTS</h3>
+<p class="clause" data-clause="6.1">6.1 Term. This Agreement begins upon the authorized acceptance described in Section 1 and continues on a month-to-month basis until ended under this Section 6. There is no minimum commitment or fixed initial term.</p>
+<p class="clause" data-clause="6.2">6.2 Client Cancellation. Tizle may cancel by giving Elevation written notice through a support or other written contact channel designated by Elevation. Cancellation becomes effective at the end of the calendar month in which Elevation receives that notice, unless the parties agree in writing to a later date. Charges for the service month in which cancellation becomes effective remain due in full under Section 3, without proration, and will be invoiced on the ordinary following-month schedule. Elevation will carry out termination of account entitlement through its operator-administered process.</p>
+<p class="clause" data-clause="6.3">6.3 Nonpayment Suspension and Termination. Suspension for nonpayment is governed by Section 3 and is not itself termination. If a suspension remains continuously in effect for thirty (30) elapsed days after the applicable invoice's suspension cutoff, Elevation may terminate this Agreement by written notice. The cutoff is determined under Section 3.6, without regard to when any particular device next checks in. If the invoice is recognized as Paid and the suspension is lifted before termination, the right to terminate on that suspension ground lapses. Termination is not automatic, and a new unpaid invoice is assessed separately under Section 3.</p>
+<p class="clause" data-clause="6.4">6.4 Material Breach and Security. Either party may terminate for the other party's material breach if the breach is not cured within seven (7) calendar days after written notice describing it. Elevation may suspend access or terminate immediately where reasonably necessary to address serious security abuse, unauthorized access or misuse that threatens EPS, other organizations, or its infrastructure, with notice as soon as reasonably practicable. This does not affect Elevation's ability to take proportionate protective measures before termination.</p>
+<p class="clause" data-clause="6.5">6.5 Effects of Termination. At termination, Tizle's license and right to use EPS end. Elevation revokes the organization's operating entitlement and disables the designated dashboard account through operator administration. An already-installed device receives and enforces revocation at its next successful service check-in; termination does not remotely uninstall EPS from the device. There is no automatic reinstatement after termination; any future service requires Elevation's approval and fresh onboarding. Accrued charges and any provisions intended by their nature to survive termination, including confidentiality and accrued payment duties, remain in effect.</p>
+<p class="clause" data-clause="6.6">6.6 Client Content and Retained Records. After termination, Elevation will, upon Tizle's written request, arrange manual deletion of Tizle-owned hosted catalog entries, support submissions (if any), and designated-account profile information, to the extent reasonably within Elevation's control and not required to be retained by applicable law. Elevation may retain its necessary service-operational and accounting records, including billing profiles, invoice and payment records, entitlement and suspension history, device registration and retirement history, and usage records supporting billed amounts. Deletion does not reach information stored only on Tizle's devices or records maintained independently by third-party payment providers. No automatic deletion, client self-service export, or post-termination read-only access is promised. Elevation will process deletion requests within a reasonable period, subject to operational and legal requirements.</p>
+<h3>SECTION 7 — WARRANTIES, LIABILITY, DISPUTES AND GOVERNING LAW</h3>
+<p class="clause" data-clause="7.1">7.1 Service Basis and Disclaimer. Elevation licenses EPS and makes its hosted components available on an 'as available' basis, subject only to the express commitments in this Agreement. To the maximum extent permitted by law, Elevation disclaims implied warranties, including merchantability, fitness for a particular purpose, and noninfringement. Elevation does not promise uninterrupted service, particular uptime, error-free operation, compatibility with future devices or third-party apps, successful playback, earnings, or business results. Nothing in this Section overrides an express obligation elsewhere in the Agreement.</p>
+<p class="clause" data-clause="7.2">7.2 Client Environment and Third Parties. Tizle is responsible for its devices, connectivity, power, VPN, accounts, playlists, compliance with third-party platform terms, and use of EPS. Elevation is not responsible for interruption, loss, or changed functionality caused by third-party services, network conditions, platform policies, or Tizle's own equipment or operations, except to the extent liability cannot lawfully be excluded.</p>
+<p class="clause" data-clause="7.3">7.3 Exclusion of Certain Damages. To the maximum extent permitted by law, neither party is liable to the other under this Agreement for indirect, incidental, special, consequential, exemplary, or punitive damages, or for lost profits, lost revenue, or lost business opportunity, whether or not advised of the possibility. This limitation does not excuse Tizle's obligation to pay fees due under Section 3 or apply where prohibited by law.</p>
+<p class="clause" data-clause="7.4">7.4 Liability Cap. To the maximum extent permitted by law, each party's total aggregate liability arising out of or relating to this Agreement will not exceed the total license and usage fees paid or payable by Tizle to Elevation for the twelve (12) months immediately preceding the event giving rise to the claim. This cap does not limit accrued payment obligations, fraud, intentional misconduct, or liability that applicable law does not permit to be limited.</p>
+<p class="clause" data-clause="7.5">7.5 No Additional Indemnity. Neither party assumes a separate contractual duty to defend or indemnify the other under this Agreement. This does not alter responsibilities expressly stated elsewhere or remedies available under applicable law.</p>
+<p class="clause" data-clause="7.6">7.6 Governing Law and Disputes. Georgia law governs this Agreement, without regard to conflict-of-law rules. The parties will first attempt in good faith to resolve a dispute by direct written communication. If unresolved, disputes arising under this Agreement may be brought in state courts located in Georgia or, where federal subject-matter jurisdiction exists, federal courts located in Georgia. Each party consents to personal jurisdiction in those courts. No mandatory arbitration is required. Each party bears its own legal fees and costs except as otherwise required by law or ordered by a court.</p>
+<h3>SECTION 8 — GENERAL TERMS, NOTICES, CHANGES AND ACCEPTANCE</h3>
+<p class="clause" data-clause="8.1">8.1 Notices. Elevation may send written notices to Tizle's designated account or billing email, including billing notices and any required notices of changes, breach or termination. Tizle may send written notices to Elevation at elevationsoftwarellc@gmail.com or another written contact channel Elevation designates. A notice is effective when sent to the designated email address, provided the sender does not receive a delivery-failure notice; where a specific advance-notice period is required, that period runs from the effective notice. Automated billing emails and other manually sent notices may use different delivery processes.</p>
+<p class="clause" data-clause="8.2">8.2 Agreement Changes. Except for the usage-charge adjustment expressly permitted by Section 3.2, changes to this Agreement require a new agreement version presented to Tizle for affirmative acceptance by its authorized representative. Elevation controls product updates, features and service configuration as otherwise described in Sections 2 and 4; those operational changes do not, by themselves, amend this Agreement. A new version becomes effective for Tizle only upon acceptance, unless a different effective date is expressly agreed in writing.</p>
+<p class="clause" data-clause="8.3">8.3 Assignment. Tizle may not assign or transfer this Agreement, the license, or its rights of access without Elevation's prior written consent; sublicensing and resale remain prohibited under Sections 1–2. Elevation may assign this Agreement in connection with a merger, reorganization, sale of substantially all relevant business assets, or transfer of EPS to a successor operator, provided the successor assumes Elevation's obligations under this Agreement. Any other assignment by Elevation requires Tizle's written consent, not to be unreasonably withheld.</p>
+<p class="clause" data-clause="8.4">8.4 Entire Agreement and Interpretation. This Agreement, including its accepted version and any amendments accepted under Section 8.2, constitutes the entire agreement between the parties concerning the EPS license and replaces earlier discussions or understandings on that subject. If a provision is held unenforceable, the remainder continues in effect to the extent lawful. Failure or delay to enforce a provision is not a waiver of future enforcement. Headings are for convenience only. Nothing creates a partnership, agency, employment relationship, or joint venture between the parties.</p>
+<p class="clause" data-clause="8.5">8.5 Electronic Acceptance and Evidence. Tizle's authorized representative accepts this Agreement affirmatively during the first-time dashboard account-setup process, before completing account password setup and accessing licensed dashboard functions. The acceptance record identifies the agreement version, acceptance timestamp, and accepting account. Electronic acceptance is intended to bind Tizle to this Agreement to the same extent as a written signature. The agreement will not be presented for acceptance in the device application. Elevation owner accounts are not subject to the client acceptance flow.</p>
+<p class="clause" data-clause="8.6">8.6 Effective Version and Copies. The agreement text presented for acceptance must be the exact Elevation-approved version. Elevation will retain the accepted version and the acceptance evidence as part of its service records. Each party may retain a copy of the accepted terms for its records. No public registration or self-service export feature is promised by this clause.</p>
+<!-- /AGREEMENT TEXT -->
+      <div class="agreement-actions">
+        <button id="acceptBtn" type="button">ACCEPT</button>
+        <button id="rejectBtn" type="button" class="ghost">REJECT</button>
+      </div>
+    </div>
+    <div id="frontdoorErr" class="err"></div>
+  </div>
+
+  <div id="setupPassword" class="card" hidden>
+    <div class="view-head">SET YOUR PASSWORD</div>
+    <label for="newPassword">New password</label>
+    <div class="pw-wrap">
+      <input id="newPassword" type="password" autocomplete="new-password">
+      <button id="newPwToggle" type="button" class="eye" aria-label="Show password">Show</button>
+    </div>
+    <button id="setPasswordBtn">SET PASSWORD</button>
+    <div id="setupPwErr" class="err"></div>
+  </div>
+
+  <div id="notAccepted" class="card" hidden>
+    <div class="view-head">AGREEMENT NOT ACCEPTED</div>
+    <p class="note">The license agreement was not accepted, so account setup cannot continue and no access has been granted. If you need anything, contact Elevation. Signing in again will present the agreement again.</p>
+  </div>
+
+  <div id="linkExpired" class="card" hidden>
+    <div class="view-head">SETUP LINK EXPIRED</div>
+    <p class="note">This setup link has expired or is no longer valid, so setup cannot continue from it. Elevation will issue a fresh setup link to the account email.</p>
+    <button id="expiredSigninBtn" type="button" class="ghost">GO TO SIGN IN</button>
+  </div>
+
+  <div id="gateError" class="card" hidden>
+    <div class="view-head">ACCOUNT CHECK FAILED</div>
+    <p class="note">Your account details could not be read, so setup cannot continue yet and no access has been granted. This can be temporary — try again.</p>
+    <button id="gateRetryBtn" type="button">RETRY</button>
+    <button id="gateSignoutBtn" type="button" class="ghost">SIGN OUT</button>
+  </div>
+
+  <div id="noAgreement" class="card" hidden>
+    <div class="view-head">NO AGREEMENT IN PLACE FOR THIS ACCOUNT</div>
+    <p class="note">No license agreement is in place for this account, so setup cannot continue and no access has been granted. If you need anything, contact Elevation.</p>
+    <button id="noAgreementSignoutBtn" type="button" class="ghost">SIGN OUT</button>
+  </div>
+
   <div id="fleet" hidden>
     <div class="bar">
       <div class="dim" id="who"></div>
@@ -331,6 +461,30 @@ const client = (configured && window.supabase)
   ? supabase.createClient(cfg.url, cfg.anonKey)
   : null;
 const eps = () => client.schema("eps");
+
+// --- Agreement front door: landing signals -------------------
+// Read synchronously, before the auth library consumes the
+// URL: a setup link lands with its facts in the hash (a
+// recovery flow carries type=recovery; an expired or invalid
+// link carries error/error_code). The PASSWORD_RECOVERY auth
+// event is the second witness and sets the same flag when it
+// fires.
+const AGREEMENT_VERSION = "1.0";
+let recoverySetup = false;
+let setupLinkExpired = false;
+(function readLandingSignals() {
+  const raw = (window.location.hash || "") + "&" + (window.location.search || "");
+  const params = new URLSearchParams(raw.replace(/^[#?&]+/, ""));
+  if (params.get("type") === "recovery") recoverySetup = true;
+  if (params.get("error_code") === "otp_expired" || params.get("error") === "access_denied") {
+    setupLinkExpired = true;
+  }
+})();
+if (client) {
+  client.auth.onAuthStateChange((event) => {
+    if (event === "PASSWORD_RECOVERY") recoverySetup = true;
+  });
+}
 
 function show(id) { document.getElementById(id).hidden = false; }
 function hide(id) { document.getElementById(id).hidden = true; }
@@ -1852,7 +2006,12 @@ async function loadFleet(user) {
     // collapsed by default, holding the relocated playlist
     // section. It renders on this same cycle, visible or not,
     // so the page is current the moment the operator opens it.
-    if (plHost) {
+    // Own-organization only (Anthony, November 8, 2026):
+    // playlist management shows only the signed-in account's
+    // own organization — the owner's support access to a
+    // client is its fleet (the Clients page), never its
+    // catalog, which lives on the client's own account only.
+    if (plHost && !isClientOrg) {
       const plExpanded = !!plOrgExpanded[org.id];
       const plBox = document.createElement("div");
       plBox.className = "card";
@@ -1930,6 +2089,197 @@ async function loadFleet(user) {
   // above; nothing about the exclusion changed, only its announcement.
 }
 
+// --- Agreement front door: the gate --------------------------
+// Every dashboard entry — a standing session at boot, either
+// sign-in path — passes through enterDashboard. The account's
+// own class decides: an account holding a VERIFIED membership
+// in the root-authority organization is owner-side and never
+// sees the door. A client account that owes acceptance of its
+// assigned version gets the door before any licensed surface
+// loads, and acceptance is recorded through the eps-agreement
+// boundary BEFORE anything else unlocks — in a recovery
+// (first-time setup) flow, before the password form.
+//
+// The gate FAILS CLOSED (TA review correction, November 9,
+// 2026): acceptance precedes licensed access (agreement
+// Section 8.5), so classification uncertainty never
+// progresses. If the account's class cannot be established —
+// the membership/organization reads fail, the account holds
+// no memberships, or a named organization does not read
+// back — the gate lands on a named, recoverable error state
+// with a retry, and nothing loads: no fleet, no door, no
+// password form, on any entry, recovery landings included.
+//
+// The embedded agreement text is ONE designated client's
+// agreement (it names that client throughout), so the door
+// presents it only when the boundary reports that this
+// account's organization is assigned exactly the embedded
+// version. No assignment — or an assignment to any other
+// version, whose text this build does not carry — lands on
+// the named no-agreement state instead.
+
+let setupUser = null;
+let doorVersion = null;
+
+async function agreementCall(action, version) {
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) throw new Error("no session");
+  const resp = await fetch(cfg.url + "/functions/v1/eps-agreement", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": cfg.anonKey,
+      "Authorization": "Bearer " + session.access_token,
+    },
+    body: JSON.stringify({ action, version: version || AGREEMENT_VERSION }),
+  });
+  const payload = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(payload.code || ("HTTP " + resp.status));
+    err.code = payload.code || null;
+    throw err;
+  }
+  return payload;
+}
+
+async function enterDashboard(user) {
+  hide("signin");
+  setupUser = user;
+  // The account's memberships and the organizations they
+  // name — the dashboard's own read surface, the same reads
+  // loadFleet stands on. Classification is the gate's
+  // foundation: if it cannot be established, the gate fails
+  // CLOSED to the recoverable error state (see the gate
+  // comment above). No path out of an unclassified account
+  // loads anything.
+  let orgRows;
+  try {
+    const { data: mems, error: memErr } = await eps()
+      .from("account_memberships").select("organization_id").eq("user_id", user.id);
+    if (memErr) throw memErr;
+    const orgIds = [...new Set((mems || []).map(m => m.organization_id))];
+    if (!orgIds.length) { show("gateError"); return; }
+    const { data: orgs, error: orgErr } = await eps()
+      .from("organizations").select("id, is_root_authority").in("id", orgIds);
+    if (orgErr) throw orgErr;
+    orgRows = orgs || [];
+    if (orgRows.length !== orgIds.length) { show("gateError"); return; }
+  } catch (e) {
+    show("gateError");
+    return;
+  }
+
+  // The owner exemption holds only on the verified root
+  // membership read above.
+  if (orgRows.some(o => o.is_root_authority)) { await loadFleet(user); return; }
+
+  // A classified client account: ask the door's own
+  // question. The answer names the agreement version this
+  // organization is assigned; acceptance already standing
+  // (or an exempt answer) proceeds. A FAILED status call
+  // establishes nothing — not the class, not the assignment
+  // — so it fails closed to the same recoverable state
+  // rather than presenting a text it cannot scope.
+  let status = null;
+  try { status = await agreementCall("status"); } catch (e) { status = null; }
+  if (!status) { show("gateError"); return; }
+  if (status.exempt || status.accepted) { await loadFleet(user); return; }
+  if (status.assigned_version !== AGREEMENT_VERSION) { show("noAgreement"); return; }
+  doorVersion = status.assigned_version;
+  show("frontdoor");
+}
+
+document.getElementById("acceptBtn").addEventListener("click", async () => {
+  const err = document.getElementById("frontdoorErr");
+  const acceptBtn = document.getElementById("acceptBtn");
+  const rejectBtn = document.getElementById("rejectBtn");
+  err.textContent = "";
+  acceptBtn.disabled = true;
+  rejectBtn.disabled = true;
+  try {
+    await agreementCall("record", doorVersion);
+  } catch (e) {
+    if (!e || e.code !== "P0525") {
+      err.textContent = "Acceptance could not be recorded" +
+        (e && e.message ? " (" + e.message + ")" : "") + " — try again.";
+      acceptBtn.disabled = false;
+      rejectBtn.disabled = false;
+      return;
+    }
+    // P0525: the act already stands recorded (an earlier
+    // press, or a second device) — proceed as accepted.
+  }
+  hide("frontdoor");
+  if (recoverySetup) { show("setupPassword"); return; }
+  await loadFleet(setupUser);
+});
+
+document.getElementById("rejectBtn").addEventListener("click", async () => {
+  // REJECT: record NOTHING. Setup stops at the named end
+  // state; the session is signed out so no licensed surface
+  // is reachable, and the account still owes acceptance — a
+  // later sign-in presents the door again.
+  hide("frontdoor");
+  show("notAccepted");
+  try { await client.auth.signOut(); } catch (e) { /* the end state stands either way */ }
+});
+
+document.getElementById("setPasswordBtn").addEventListener("click", async () => {
+  const err = document.getElementById("setupPwErr");
+  const pw = document.getElementById("newPassword").value;
+  const btn = document.getElementById("setPasswordBtn");
+  err.textContent = "";
+  if (!pw) { err.textContent = "Enter a new password."; return; }
+  btn.disabled = true;
+  const { error } = await client.auth.updateUser({ password: pw });
+  if (error) {
+    err.textContent = error.message || "The password could not be set — try again.";
+    btn.disabled = false;
+    return;
+  }
+  hide("setupPassword");
+  await loadFleet(setupUser);
+});
+
+document.getElementById("newPwToggle").addEventListener("click", () => {
+  const pw = document.getElementById("newPassword");
+  const showing = pw.type === "text";
+  pw.type = showing ? "password" : "text";
+  const btn = document.getElementById("newPwToggle");
+  btn.textContent = showing ? "Show" : "Hide";
+  btn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+});
+
+document.getElementById("expiredSigninBtn").addEventListener("click", () => {
+  hide("linkExpired");
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(null, "", window.location.pathname);
+  }
+  show("signin");
+});
+
+// The fail-closed state's controls: RETRY re-runs the gate
+// from the top for the same account; SIGN OUT (here and on
+// the no-agreement state) ends the session and returns to
+// the sign-in form IN PLACE — no page reload (the refresh
+// design pins the file's one reload to the fleet sign-out)
+// — and clears the recovery character of the setup attempt
+// it ends.
+document.getElementById("gateRetryBtn").addEventListener("click", async () => {
+  hide("gateError");
+  await enterDashboard(setupUser);
+});
+
+async function gateSignOut() {
+  hide("gateError");
+  hide("noAgreement");
+  try { await client.auth.signOut(); } catch (e) { /* the sign-in form stands either way */ }
+  recoverySetup = false;
+  show("signin");
+}
+document.getElementById("gateSignoutBtn").addEventListener("click", gateSignOut);
+document.getElementById("noAgreementSignoutBtn").addEventListener("click", gateSignOut);
+
 async function boot() {
   const err = document.getElementById("signinErr");
   if (!window.supabase) {
@@ -1946,9 +2296,10 @@ async function boot() {
       "Dashboard not configured yet — the project anon key goes in config.js.";
     return;
   }
+  if (setupLinkExpired) { show("linkExpired"); return; }
   try {
     const { data: { session } } = await client.auth.getSession();
-    if (session) loadFleet(session.user); else show("signin");
+    if (session) enterDashboard(session.user); else show("signin");
   } catch (e) {
     show("signin");
     err.textContent = "Could not reach the sign-in service: " + (e && e.message ? e.message : e);
@@ -2019,7 +2370,7 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
         err.textContent = "Invalid login credentials";
         return;
       }
-      await loadFleet(session.data.user);
+      await enterDashboard(session.data.user);
       return;
     }
     const { data, error } = await client.auth.signInWithPassword({
@@ -2034,7 +2385,7 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
       err.textContent = "Sign-in did not complete — please try again.";
       return;
     }
-    await loadFleet(data.user);
+    await enterDashboard(data.user);
   } catch (e) {
     err.textContent = "Sign-in failed: " + (e && e.message ? e.message : e);
   } finally {
