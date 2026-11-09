@@ -847,10 +847,15 @@ function updateBtnState(rt) {
 // and both stand disabled otherwise: the honest
 // applicability the phone enforces regardless of the surface.
 function nudgeBtnStates(rt) {
-  const plat = rt && rt.conducting ? rt.current_platform : null;
+  // The standing platform source and vocabulary, same as the card's
+  // platform label and the start seed: reported_platform first, stored
+  // values 'apple' | 'youtube'. (The 'apple_music' literal belongs to the
+  // command-payload vocabulary only — comparing a stored platform
+  // against it left both buttons permanently disabled.)
+  const plat = rt && rt.conducting ? (rt.reported_platform || rt.current_platform) : null;
   return {
     shuffle: { cmd: "shuffle_now", label: "SHUFFLE",
-      disabled: plat !== "apple_music" },
+      disabled: plat !== "apple" },
     play: { cmd: "play_now", label: "PLAY",
       disabled: plat !== "youtube" },
   };
