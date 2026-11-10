@@ -2183,7 +2183,16 @@ async function enterDashboard(user) {
   let status = null;
   try { status = await agreementCall("status"); } catch (e) { status = null; }
   if (!status) { show("gateError"); return; }
-  if (status.exempt || status.accepted) { await loadFleet(user); return; }
+  // Acceptance standing does not end a recovery landing's
+  // purpose: the landing exists to set the password, so an
+  // accepted (or exempt) account arriving by recovery is
+  // offered the password form first — the ACCEPT handler's
+  // own routing, mirrored. An ordinary sign-in proceeds
+  // straight to the fleet, as ever.
+  if (status.exempt || status.accepted) {
+    if (recoverySetup) { show("setupPassword"); return; }
+    await loadFleet(user); return;
+  }
   if (status.assigned_version !== AGREEMENT_VERSION) { show("noAgreement"); return; }
   doorVersion = status.assigned_version;
   show("frontdoor");
