@@ -639,14 +639,33 @@ const unitStatusHtml = {};  // unit id -> the status cell's rendered depth (rest
 // correction): exact at any table size, never a client-side
 // sum over a capped row read. The line therefore reads
 // CHECK-INS: the per-organization proxy EPS counts, never
-// Supabase's project total. The allotment is Anthony's settled model:
-// 200,000 a month on the Free plan, 1,000,000 on Pro. The
-// current plan state is named in ONE place — flipping to Pro
-// changes USAGE_ALLOTMENT and nothing else. Display only: no
-// billing math lives here.
-const FREE_ALLOTMENT = 200000;
-const PRO_ALLOTMENT = 1000000;
-const USAGE_ALLOTMENT = FREE_ALLOTMENT;
+// Supabase's project total. The project moved to the Pro plan
+// on November 10, 2026 (Anthony's hand, charged that day).
+// TWO UNLIKE MEASURES stand as neighbors on the owner's card,
+// never as a ratio (TA's PR #121 review correction, November
+// 10, 2026): the counted figure is EPS's per-organization
+// check-in proxy, exactly as before; the 2,000,000 is
+// Supabase's PROJECT-WIDE Edge Function invocation quota, the
+// same figure its own usage page shows. The usage block
+// therefore carries no percentage bar — a bar would present
+// the check-in count as invocation consumption, which it is
+// not. The usage line is an OWNER-side display only (Anthony,
+// November 10, 2026): a client account never renders it — a
+// client's dashboard is its fleet, nothing more. Display
+// only: no billing math lives here.
+const PROJECT_INVOCATION_LIMIT = 2000000;
+// Egress: the gigabytes leaving Supabase are the resource the
+// plan meters tightest (232% of the Free quota while
+// invocations stood at 4%, November 10, 2026). Supabase
+// reports egress only as a project total on its own usage
+// page — no EPS record carries bytes — so the used figure
+// below is the operator-reported value Anthony hands over,
+// date-stamped, refreshed when he relays a fresh read. Pro
+// quota: 250 GB a cycle. The line renders on the owner
+// organization's card only, directly under the usage line.
+const EGRESS_USED_GB = 0;
+const EGRESS_QUOTA_GB = 250;
+const EGRESS_AS_OF = "NOVEMBER 10, 2026";
 const orgExpanded = {};    // org id -> bool: the operator's (or the default's) expansion choice
 const searchForce = new Set();  // org ids a unit-match in the search holds open while the query stands
 const resetTimers = {};    // unit id -> the confirm state's revert timer
@@ -1751,15 +1770,21 @@ async function loadFleet(user) {
   // a fabricated figure.
   const usageOf = {};
   const monthBounds = usageMonthBounds();
-  await Promise.all((orgs || []).map(async org => {
-    const { data, error } = await eps().rpc(
-      "usage_month_checkins", {
-        p_organization_id: org.id,
-        p_month_start: monthBounds.start,
-        p_month_end: monthBounds.end,
-      });
-    usageOf[org.id] = error ? null : Number(data);
-  }));
+  // The usage line is owner-side only (see PROJECT_INVOCATION_LIMIT):
+  // an account that sees no root organization never renders
+  // it, so its counts are not even fetched.
+  const usageVisible = (orgs || []).some(o => o.is_root_authority);
+  if (usageVisible) {
+    await Promise.all((orgs || []).map(async org => {
+      const { data, error } = await eps().rpc(
+        "usage_month_checkins", {
+          p_organization_id: org.id,
+          p_month_start: monthBounds.start,
+          p_month_end: monthBounds.end,
+        });
+      usageOf[org.id] = error ? null : Number(data);
+    }));
+  }
 
   const host = document.getElementById("orgs");
   host.innerHTML = "";
@@ -1950,6 +1975,17 @@ async function loadFleet(user) {
         // so no row of the stack hangs half-empty.
         "<button type='button' class='ctl-btn wide' data-cmd='report_now' data-unit='" +
           esc(u.id) + "'>REPORT NOW</button>" +
+        // REFRESH (Anthony, November 10, 2026): the top bar's
+        // refresh, standing at the unit itself — an operator
+        // scrolled down to a unit re-reads the fleet right
+        // there instead of travelling back up to the bar. It is
+        // the same in-place re-read of the whole fleet, never a
+        // command to the phone; the handler restores the
+        // operator's place at this unit when the re-read lands.
+        // It stands beneath REPORT NOW; RESET QUEUE keeps the
+        // last place.
+        "<button type='button' class='ctl-btn wide' data-refresh-unit='" +
+          esc(u.id) + "'>REFRESH</button>" +
         // RESET QUEUE stands LAST in the stack, always
         // (Anthony's ruling, November 8, 2026): the bottom of
         // the pyramid, beneath every paired row, in every
@@ -2001,22 +2037,42 @@ async function loadFleet(user) {
       orgExpanded[org.id] = orgAlerts > 0 || !!stateCounts["PLAYING"];
     }
     const expanded = !!orgExpanded[org.id] || searchForce.has(org.id);
-    // The usage line (Part 4): this month's counted check-ins
-    // against the allotment, with the thin gold bar under it. A
-    // failed usage call renders UNKNOWN — never a figure.
+    // The usage block (Part 4): this month's counted check-ins
+    // on their own line, and the project-wide invocation limit
+    // on the line beneath — two unlike measures, labeled as
+    // what they are, never ratioed (TA's PR #121 correction).
+    // A failed usage call renders UNKNOWN — never a figure.
+    // Owner-side only (Anthony, November 10, 2026): when the
+    // signed-in account sees no root organization — a client
+    // account — no usage line renders on any card at all.
     let usageHtml;
-    if (usageOf[org.id] == null) {
+    if (!seesRoot) {
+      usageHtml = "";
+    } else if (usageOf[org.id] == null) {
       usageHtml = "<div class='usage'><div class='usage-line'>" +
         "USAGE — UNKNOWN</div></div>";
     } else {
       const used = usageOf[org.id];
-      const pct = Math.min(100, (100 * used) / USAGE_ALLOTMENT);
       usageHtml = "<div class='usage'><div class='usage-line'>USAGE — " +
-        used.toLocaleString("en-US") + " / " +
-        USAGE_ALLOTMENT.toLocaleString("en-US") +
+        used.toLocaleString("en-US") +
         " CHECK-INS THIS MONTH</div>" +
+        "<div class='usage-line'>PROJECT LIMIT — " +
+        PROJECT_INVOCATION_LIMIT.toLocaleString("en-US") +
+        " INVOCATIONS</div></div>";
+    }
+    // The egress line (Anthony, November 10, 2026): the
+    // project's gigabytes against the Pro quota, standing
+    // directly under the usage line on the OWNER organization's
+    // card only — the figure is the operator-reported value
+    // (see EGRESS_USED_GB), date-stamped on the line itself.
+    let egressHtml = "";
+    if (seesRoot && org.is_root_authority) {
+      const epct = Math.min(100, (100 * EGRESS_USED_GB) / EGRESS_QUOTA_GB);
+      egressHtml = "<div class='usage'><div class='usage-line'>EGRESS — " +
+        EGRESS_USED_GB + " / " + EGRESS_QUOTA_GB +
+        " GB THIS CYCLE · AS OF " + EGRESS_AS_OF + "</div>" +
         "<div class='usage-bar'><div class='usage-fill' style='width:" +
-        pct + "%'></div></div></div>";
+        epct + "%'></div></div></div>";
     }
     const card = document.createElement("div");
     card.className = "card";
@@ -2065,6 +2121,7 @@ async function loadFleet(user) {
           : (noticeCount[org.id] ? " · Unsent notices: " + noticeCount[org.id] : "")) +
       "</div>" +
       usageHtml +
+      egressHtml +
       "<div class='org-actions'><button type='button' class='ctl-btn' data-update-all='" +
         esc(org.id) + "'" +
         (updateAllTargets[org.id].length ? "" : " disabled") +
@@ -2141,6 +2198,11 @@ async function loadFleet(user) {
   // lines' expand/collapse.
   document.querySelectorAll("#orgs [data-reset], #clientOrgs [data-reset]").forEach(btn => {
     btn.addEventListener("click", () => resetQueue(btn));
+  });
+  // The per-unit REFRESH buttons (November 10, 2026): the same
+  // fleet re-read as the bar's button, from the unit's own row.
+  document.querySelectorAll("#orgs [data-refresh-unit], #clientOrgs [data-refresh-unit]").forEach(btn => {
+    btn.addEventListener("click", () => refreshAtUnit(btn));
   });
   document.querySelectorAll("#orgs [data-summary], #clientOrgs [data-summary]").forEach(btn => {
     btn.addEventListener("click", () => toggleOrg(btn.dataset.summary));
@@ -2526,6 +2588,49 @@ document.getElementById("signinBtn").addEventListener("click", async () => {
     if (!panel.hidden && !ev.target.closest(".menu-wrap")) panel.hidden = true;
   });
 })();
+
+// Per-unit refresh (Anthony, November 10, 2026): every unit's
+// control stack carries the bar's refresh at the unit itself,
+// so an operator scrolled down to a unit — D21, say — re-reads
+// the fleet right there instead of travelling back to the top
+// of the page. The re-read is the whole fleet's, exactly the
+// bar button's own load; what is per-unit is the OPERATOR'S
+// PLACE: the clicked button's position on screen is taken
+// before the re-read and restored after it, so the operator
+// lands back on the same unit at the same height and sees
+// whether the change they were watching for has landed. The
+// button disables itself and says so while the reads are in
+// flight. A successful re-read retires it — the fresh button
+// at the restored place stands enabled — but a FAILED read,
+// or no session standing, leaves this very button mounted,
+// and then it restores itself like the bar's button does
+// (TA's PR #122 review, November 10, 2026): enabled again,
+// its own label back, never stranded on REFRESHING….
+async function refreshAtUnit(btn) {
+  const unitId = btn.dataset.refreshUnit;
+  const err = document.getElementById("fleetErr");
+  const label = btn.textContent;
+  const y = btn.getBoundingClientRect().top;
+  btn.disabled = true;
+  btn.textContent = "REFRESHING…";
+  try {
+    const { data: { session } } = await client.auth.getSession();
+    if (session) await loadFleet(session.user);
+  } catch (e) {
+    err.textContent = "Refresh failed: " + (e && e.message ? e.message : e);
+  }
+  const again = document.querySelector(
+    "[data-refresh-unit='" + unitId + "']");
+  if (again === btn) {
+    // No re-render replaced this button — the read failed or
+    // no session stood. Restore it in place.
+    btn.disabled = false;
+    btn.textContent = label;
+  } else if (again) {
+    const dy = again.getBoundingClientRect().top - y;
+    if (dy) window.scrollBy(0, dy);
+  }
+}
 
 // Refresh (Anthony, November 4, 2026): re-read the fleet in
 // place instead of reloading the whole page. The button
