@@ -654,18 +654,13 @@ const unitStatusHtml = {};  // unit id -> the status cell's rendered depth (rest
 // client's dashboard is its fleet, nothing more. Display
 // only: no billing math lives here.
 const PROJECT_INVOCATION_LIMIT = 2000000;
-// Egress: the gigabytes leaving Supabase are the resource the
-// plan meters tightest (232% of the Free quota while
-// invocations stood at 4%, November 10, 2026). Supabase
-// reports egress only as a project total on its own usage
-// page — no EPS record carries bytes — so the used figure
-// below is the operator-reported value Anthony hands over,
-// date-stamped, refreshed when he relays a fresh read. Pro
-// quota: 250 GB a cycle. The line renders on the owner
-// organization's card only, directly under the usage line.
-const EGRESS_USED_GB = 0;
-const EGRESS_QUOTA_GB = 250;
-const EGRESS_AS_OF = "NOVEMBER 10, 2026";
+// NO egress line stands on this dashboard (Anthony's ruling,
+// November 10, 2026): Supabase meters the gigabytes itself and
+// exposes them only on its own usage page and the invoice —
+// no API read exists, and no seat here can read the page — so
+// a dashboard figure could only ever be a stale hand-copy of
+// a number its owner reads at the source. A display that
+// cannot keep itself true is removed, not mirrored.
 const orgExpanded = {};    // org id -> bool: the operator's (or the default's) expansion choice
 const searchForce = new Set();  // org ids a unit-match in the search holds open while the query stands
 const resetTimers = {};    // unit id -> the confirm state's revert timer
@@ -2060,20 +2055,6 @@ async function loadFleet(user) {
         PROJECT_INVOCATION_LIMIT.toLocaleString("en-US") +
         " INVOCATIONS</div></div>";
     }
-    // The egress line (Anthony, November 10, 2026): the
-    // project's gigabytes against the Pro quota, standing
-    // directly under the usage line on the OWNER organization's
-    // card only — the figure is the operator-reported value
-    // (see EGRESS_USED_GB), date-stamped on the line itself.
-    let egressHtml = "";
-    if (seesRoot && org.is_root_authority) {
-      const epct = Math.min(100, (100 * EGRESS_USED_GB) / EGRESS_QUOTA_GB);
-      egressHtml = "<div class='usage'><div class='usage-line'>EGRESS — " +
-        EGRESS_USED_GB + " / " + EGRESS_QUOTA_GB +
-        " GB THIS CYCLE · AS OF " + EGRESS_AS_OF + "</div>" +
-        "<div class='usage-bar'><div class='usage-fill' style='width:" +
-        epct + "%'></div></div></div>";
-    }
     const card = document.createElement("div");
     card.className = "card";
     card.dataset.org = org.id;
@@ -2121,7 +2102,6 @@ async function loadFleet(user) {
           : (noticeCount[org.id] ? " · Unsent notices: " + noticeCount[org.id] : "")) +
       "</div>" +
       usageHtml +
-      egressHtml +
       "<div class='org-actions'><button type='button' class='ctl-btn' data-update-all='" +
         esc(org.id) + "'" +
         (updateAllTargets[org.id].length ? "" : " disabled") +
