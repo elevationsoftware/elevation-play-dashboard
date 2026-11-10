@@ -641,16 +641,19 @@ const unitStatusHtml = {};  // unit id -> the status cell's rendered depth (rest
 // CHECK-INS: the per-organization proxy EPS counts, never
 // Supabase's project total. The project moved to the Pro plan
 // on November 10, 2026 (Anthony's hand, charged that day).
-// TWO UNLIKE MEASURES stand as neighbors on the owner's card,
-// never as a ratio (TA's PR #121 review correction, November
-// 10, 2026): the counted figure is EPS's per-organization
-// check-in proxy, exactly as before; the 2,000,000 is
-// Supabase's PROJECT-WIDE Edge Function invocation quota, the
-// same figure its own usage page shows. The usage block
-// therefore carries no percentage bar — a bar would present
-// the check-in count as invocation consumption, which it is
-// not. The usage line is an OWNER-side display only (Anthony,
-// November 10, 2026): a client account never renders it — a
+// The counted figure is EPS's check-in proxy, summed across
+// EVERY organization; the 2,000,000 is Supabase's
+// PROJECT-WIDE Edge Function invocation quota, the same
+// figure its own usage page shows. TA's PR #121 correction
+// (November 10, 2026) established that the two are unlike
+// measures and must stay labeled as what they are — CHECK-INS
+// against INVOCATIONS, which the lines do. Anthony's
+// direction the same day: the account is one pool whose cost
+// splits regardless of which organization uses what, so the
+// display tracks the WHOLE account against the project limit
+// with its bar — per-account allotment tracking is not what
+// he runs his business on. The usage block is an OWNER-side
+// display only: a client account never renders it — a
 // client's dashboard is its fleet, nothing more. Display
 // only: no billing math lives here.
 const PROJECT_INVOCATION_LIMIT = 2000000;
@@ -1583,20 +1586,32 @@ function moneyRain() {
   setTimeout(() => layer.remove(), 4200);
 }
 
-// The CURRENT UTC MONTH's bounds, passed to the server-side
-// usage aggregate. usage_daily buckets are UTC days, so the
-// month the line names is the buckets' own month: the range
-// is [first day of this UTC month, first day of the next),
-// computed in UTC — never the browser's local month edge,
-// which could sit a day either side of the buckets it sums.
-function usageMonthBounds() {
+// The billing cycle's anchor day: the Supabase Pro cycle
+// re-anchored to the 10th when the plan began (November 10,
+// 2026 — Anthony's billing date, the 10th monthly). If that
+// date ever changes, this constant changes with it.
+const BILLING_CYCLE_ANCHOR_DAY = 10;
+
+// The CURRENT BILLING CYCLE's bounds, passed to the
+// server-side usage aggregate (Anthony, November 10, 2026):
+// the usage count follows the cycle, not the calendar month,
+// so the count and the project invocation limit describe the
+// same period — Supabase zeroed its counters at the cycle
+// start, and a calendar-month count would silently include
+// days the limit does not measure. usage_daily buckets are
+// UTC days, so the cycle is [the anchor day, the next
+// month's anchor day) in UTC dates — the buckets' own frame.
+function usageCycleBounds() {
   const d = new Date();
   const isoDay = t => t.toISOString().slice(0, 10);
+  const back = d.getUTCDate() >= BILLING_CYCLE_ANCHOR_DAY ? 0 : -1;
   return {
     start: isoDay(new Date(Date.UTC(
-      d.getUTCFullYear(), d.getUTCMonth(), 1))),
+      d.getUTCFullYear(), d.getUTCMonth() + back,
+      BILLING_CYCLE_ANCHOR_DAY))),
     end: isoDay(new Date(Date.UTC(
-      d.getUTCFullYear(), d.getUTCMonth() + 1, 1))),
+      d.getUTCFullYear(), d.getUTCMonth() + back + 1,
+      BILLING_CYCLE_ANCHOR_DAY))),
   };
 }
 
@@ -1758,13 +1773,15 @@ async function loadFleet(user) {
       playlistOf[r.organization_id] || []).push(r);
   });
   // Usage (Part 4; server-side aggregate since the correction):
-  // this month's counted check-ins, one eps.usage_month_checkins
-  // call per company over the current UTC month's bounds. The
-  // total comes back exact from the server; a failed call leaves
-  // the company null and its line renders UNKNOWN below — never
+  // this cycle's counted check-ins, one eps.usage_month_checkins
+  // call per company over the current billing cycle's bounds
+  // (the aggregate takes any range; the cycle window is the
+  // caller's choice — see usageCycleBounds). The total comes
+  // back exact from the server; a failed call leaves the
+  // company null and its line renders UNKNOWN below — never
   // a fabricated figure.
   const usageOf = {};
-  const monthBounds = usageMonthBounds();
+  const cycleBounds = usageCycleBounds();
   // The usage line is owner-side only (see PROJECT_INVOCATION_LIMIT):
   // an account that sees no root organization never renders
   // it, so its counts are not even fetched.
@@ -1774,8 +1791,8 @@ async function loadFleet(user) {
       const { data, error } = await eps().rpc(
         "usage_month_checkins", {
           p_organization_id: org.id,
-          p_month_start: monthBounds.start,
-          p_month_end: monthBounds.end,
+          p_month_start: cycleBounds.start,
+          p_month_end: cycleBounds.end,
         });
       usageOf[org.id] = error ? null : Number(data);
     }));
@@ -2032,28 +2049,41 @@ async function loadFleet(user) {
       orgExpanded[org.id] = orgAlerts > 0 || !!stateCounts["PLAYING"];
     }
     const expanded = !!orgExpanded[org.id] || searchForce.has(org.id);
-    // The usage block (Part 4): this month's counted check-ins
-    // on their own line, and the project-wide invocation limit
-    // on the line beneath — two unlike measures, labeled as
-    // what they are, never ratioed (TA's PR #121 correction).
-    // A failed usage call renders UNKNOWN — never a figure.
-    // Owner-side only (Anthony, November 10, 2026): when the
+    // The usage block (Part 4; reshaped November 10, 2026):
+    // ONE account-total block on the OWNER organization's
+    // card — the whole account's counted check-ins this cycle,
+    // every organization summed, tracked against the project
+    // limit. Anthony's direction: the account is one pool (the
+    // plan cost splits regardless of which organization uses
+    // what), so the display tracks the pool; per-organization
+    // counts render nowhere. The count is EPS's check-in proxy
+    // and the limit is Supabase's invocation quota — the
+    // distinction stands in the labels (CHECK-INS against
+    // INVOCATIONS), and the bar is the owner's whole-account
+    // tracking visual at his direction. A failed count for ANY
+    // organization renders UNKNOWN — a partial sum would
+    // understate the account. Owner-side only: when the
     // signed-in account sees no root organization — a client
-    // account — no usage line renders on any card at all.
-    let usageHtml;
-    if (!seesRoot) {
-      usageHtml = "";
-    } else if (usageOf[org.id] == null) {
-      usageHtml = "<div class='usage'><div class='usage-line'>" +
-        "USAGE — UNKNOWN</div></div>";
-    } else {
-      const used = usageOf[org.id];
-      usageHtml = "<div class='usage'><div class='usage-line'>USAGE — " +
-        used.toLocaleString("en-US") +
-        " CHECK-INS THIS MONTH</div>" +
-        "<div class='usage-line'>PROJECT LIMIT — " +
-        PROJECT_INVOCATION_LIMIT.toLocaleString("en-US") +
-        " INVOCATIONS</div></div>";
+    // account — nothing renders on any card at all.
+    let usageHtml = "";
+    if (seesRoot && org.is_root_authority) {
+      const counts = (orgs || []).map(o => usageOf[o.id]);
+      if (counts.some(c => c == null)) {
+        usageHtml = "<div class='usage'><div class='usage-line'>" +
+          "USAGE — UNKNOWN</div></div>";
+      } else {
+        const total = counts.reduce((a, b) => a + b, 0);
+        const upct = Math.min(100,
+          (100 * total) / PROJECT_INVOCATION_LIMIT);
+        usageHtml = "<div class='usage'><div class='usage-line'>USAGE — " +
+          total.toLocaleString("en-US") +
+          " CHECK-INS THIS CYCLE</div>" +
+          "<div class='usage-bar'><div class='usage-fill' style='width:" +
+          upct + "%'></div></div>" +
+          "<div class='usage-line'>PROJECT LIMIT — " +
+          PROJECT_INVOCATION_LIMIT.toLocaleString("en-US") +
+          " INVOCATIONS</div></div>";
+      }
     }
     const card = document.createElement("div");
     card.className = "card";
