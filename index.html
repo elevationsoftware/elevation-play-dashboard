@@ -184,6 +184,20 @@
   }
   .alert-title { color: var(--gold); font-size: 13px; font-weight: 700; letter-spacing: .08em; margin-bottom: 8px; }
   .alert-line { font-size: 14px; padding: 4px 0; }
+  /* Update notice (November 9, 2026): a standing banner at the
+     top of a company's fleet card while any phone in the fleet
+     reports a version below the current release. It carries no
+     control of any kind — there is nothing to dismiss; it
+     clears only when every phone in the fleet is current. */
+  .update-banner {
+    background: var(--bg); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
+  }
+  .update-banner .ub-head {
+    color: var(--gold); font-size: 13px; font-weight: 700;
+    letter-spacing: .08em; margin-bottom: 6px;
+  }
+  .update-banner .ub-line { font-size: 13.5px; line-height: 1.45; }
   /* Step 7 Part 4 — the finishing pieces.
      Queue reset: the quiet sibling on the controls row — same
      34px / 7px rounding as every control, but in the secondary
@@ -1600,8 +1614,9 @@ async function loadFleet(user) {
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
-      eps().from("physical_installations").select("system_unit_id, status, app_version_name, app_version_reported_at"),
+      eps().from("physical_installations").select("system_unit_id, status, app_version_name, app_version_code, app_version_reported_at, installed_at"),
       eps().from("playlist_entries").select("id, organization_id, platform, number, name").eq("active", true).order("platform").order("number"),
+      eps().rpc("app_current_release"),
     ]);
   const names = ["organizations", "units", "labels", "runtime state",
                  "heartbeats", "billing periods", "notices", "installations", "playlists"];
@@ -1614,6 +1629,23 @@ async function loadFleet(user) {
   if (failed.length) {
     err.textContent = "Some data could not be loaded (" +
       failed.join(", ") + ") — what is shown may be incomplete.";
+  }
+  // The current release (the update banner's premise): the
+  // tenth read above, one eps.app_current_release call per
+  // fleet load, answering a single {version_code, version_name}
+  // object whose fields are null when no release stands. This
+  // read is deliberately NOT one of the named reads above: a
+  // failed call or a null code leaves the premise unproven and
+  // NO banner stands anywhere — a notice that cannot verify
+  // its premise does not stand, and the fleet view loses
+  // nothing by its absence.
+  const releaseRead = reads[9] || {};
+  let currentReleaseCode = null;
+  if (!releaseRead.error) {
+    const rel = Array.isArray(releaseRead.data)
+      ? releaseRead.data[0] : releaseRead.data;
+    const code = rel ? Number(rel.version_code) : NaN;
+    if (Number.isFinite(code) && code > 0) currentReleaseCode = code;
   }
   // Account state comes from the system's own computation
   // (eps.account_org_entitlement_state), one call per visible
@@ -1675,6 +1707,26 @@ async function loadFleet(user) {
     const cur = versionOf[r.system_unit_id];
     if (!cur || String(r.app_version_reported_at || "") > String(cur.at || "")) {
       versionOf[r.system_unit_id] = { name: r.app_version_name, at: r.app_version_reported_at };
+    }
+  });
+  // The installation whose reported version CODE speaks for
+  // the unit (the update banner's comparison): the fleet
+  // view's pick over ALL of a unit's installations — an active
+  // installation first, then the latest installed_at. This is
+  // the same pick the update-notice email's candidate read
+  // makes, so the banner and the email never disagree about a
+  // unit's version. (The versionOf name pick above is the
+  // display fact and keeps its own rule.)
+  const pickedInstall = {};
+  (installations || []).forEach(r => {
+    const cur = pickedInstall[r.system_unit_id];
+    if (!cur) { pickedInstall[r.system_unit_id] = r; return; }
+    const candActive = r.status === "active" ? 1 : 0;
+    const curActive = cur.status === "active" ? 1 : 0;
+    if (candActive > curActive ||
+        (candActive === curActive &&
+         String(r.installed_at || "") > String(cur.installed_at || ""))) {
+      pickedInstall[r.system_unit_id] = r;
     }
   });
   (periods || []).forEach(r => { if (!periodOf[r.organization_id]) periodOf[r.organization_id] = r; });
@@ -1972,7 +2024,31 @@ async function loadFleet(user) {
     card.dataset.name = orgInitials(org.display_name).toLowerCase();
     card.dataset.search = (String(org.display_name || "") + " " +
       orgInitials(org.display_name)).toLowerCase();
+    // The update banner's test for this company: any rendered,
+    // non-retired unit whose picked installation reports a
+    // version code below the current release's code. A retired
+    // unit is out of the fleet and out of the notice (the
+    // email's rule, and the banner's copy promises the notice
+    // clears — a retired phone can never be brought current);
+    // a unit that has never reported a code contributes
+    // nothing; with no proven current release no banner
+    // stands. The banner stands at the very top of the card,
+    // above the summary line, so it is seen whether the
+    // section stands expanded or collapsed.
+    const fleetBehind = currentReleaseCode !== null && orgUnits.some(u => {
+      if (u.status === "retired") return false;
+      const picked = pickedInstall[u.id];
+      const code = picked ? Number(picked.app_version_code) : NaN;
+      return Number.isFinite(code) && code > 0 && code < currentReleaseCode;
+    });
+    const updateBannerHtml = fleetBehind
+      ? "<div class='update-banner' role='alert'>" +
+          "<div class='ub-head'>UPDATE AVAILABLE</div>" +
+          "<div class='ub-line'>ONE OR MORE PHONES IN THIS FLEET ARE NOT ON THE CURRENT VERSION. THIS NOTICE CLEARS WHEN EVERY PHONE IS CURRENT.</div>" +
+        "</div>"
+      : "";
     card.innerHTML =
+      updateBannerHtml +
       "<button type='button' class='org-summary' data-summary='" +
         esc(org.id) + "' aria-expanded='" + (expanded ? "true" : "false") + "'>" +
         "<span class='org-name'>" + esc(orgInitials(org.display_name)) + "</span>" +
