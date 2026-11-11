@@ -1922,7 +1922,14 @@ async function loadFleet(user) {
         }
       }
       const latest = latestCmd[u.id];
-      if (latest && latest.state === "failed") {
+      // A failed command alerts only while the failure is still
+      // the unit's live condition. Once the unit is conducting
+      // and the music is playing again, the failure is history —
+      // the alert clears with the condition (Anthony, November
+      // 11, 2026: a cleared fault must not sit at the top of the
+      // screen as if it were not fixed).
+      if (latest && latest.state === "failed" &&
+          !(rt.conducting && rt.music_active === true)) {
         pushAlert(unitName + " — " +
           (CMD_LABEL[latest.type] || String(latest.type).toUpperCase()) +
           " COMMAND FAILED" +
