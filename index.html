@@ -1144,6 +1144,57 @@ function liveWindowNote(rt) {
   return "ANSWERS AT THE NEXT CHECK-IN";
 }
 
+// The music word (1.0.17, November 12, 2026): the phone's
+// judged word for the session's music, derived on the phone
+// from its playback coordinator's own state — the word the
+// dashboard believes, because the raw music fact beneath it
+// can flicker false while the music plays. When a word
+// stands it drives the status outright (the word speaks
+// precisely while no session stands — a between-sessions
+// switch has conducting false); when none stands — an
+// earlier build — the boolean derivation below runs exactly
+// as it always has. SWITCHING names the incoming platform
+// with the standing single letter: sessions alternate, so
+// the incoming platform is the other one from the retiring
+// session's — the closing session's reported platform while
+// it closes, the last session's once it has ended.
+function musicWordStatusOf(rt, entry) {
+  const w = rt.music_word;
+  if (w === "playing") {
+    return { word: "PLAYING", entry: entry, standing: true };
+  }
+  if (w === "not_playing") {
+    return { word: "NOT PLAYING", entry: entry,
+             standing: true, sub: musicReasonLabel(rt.music_reason) };
+  }
+  if (w === "switching") {
+    const retiring = rt.conducting
+      ? rt.reported_platform : rt.last_session_platform;
+    const incoming = retiring === "apple" ? "youtube"
+      : retiring === "youtube" ? "apple" : null;
+    return { word: "SWITCHING", entry: null, standing: true,
+             sub: incoming ? platLabel(incoming) : null };
+  }
+  if (w === "starting") {
+    return { word: "STARTING", entry: entry, standing: true };
+  }
+  if (w === "restarting") {
+    // A commanded restart, performed on the SAME platform:
+    // the platform being restarted is the one that just
+    // retired — the last session's, named by its letter.
+    const p = rt.last_session_platform || rt.reported_platform;
+    return { word: "RESTARTING", entry: null, standing: true,
+             sub: p ? platLabel(p) : null };
+  }
+  if (w === "music_never_started") {
+    return { word: "MUSIC NEVER STARTED", entry: entry, standing: true };
+  }
+  if (w === "app_never_opened") {
+    return { word: "APP NEVER OPENED", entry: entry, standing: true };
+  }
+  return null;
+}
+
 function unitStatusOf(u, rt) {
   if (u.status !== "active") {
     return { word: String(u.status || "").toUpperCase(), entry: null };
@@ -1166,6 +1217,15 @@ function unitStatusOf(u, rt) {
                standing: true,
                sub: "NO CONTACT — DEAD OR CONNECTION DOWN" };
     }
+    // The phone's music word decides next, when one stands
+    // (1.0.17): the judged word outranks the raw fact it was
+    // derived to correct. The silence class above still
+    // outranks both — no word is current once the phone has
+    // stopped checking in.
+    if (rt.music_word) {
+      const byWord = musicWordStatusOf(rt, rt.current_entry || null);
+      if (byWord) return byWord;
+    }
     // The phone's own music fact decides the rest: a reported
     // silence is NOT PLAYING, with its reason beneath; a
     // reported sounding fact is PLAYING — the only road to
@@ -1184,6 +1244,13 @@ function unitStatusOf(u, rt) {
     }
     return { word: "STANDING", entry: rt.current_entry || null,
              standing: true, sub: "MUSIC NOT REPORTED" };
+  }
+  // No session stands — but a word can still speak here: the
+  // between-sessions switch is reported while conducting is
+  // false, and it is the word's whole reason to exist.
+  if (rt.music_word) {
+    const byWord = musicWordStatusOf(rt, null);
+    if (byWord) return byWord;
   }
   return { word: "READY", entry: null };
 }
@@ -1652,7 +1719,7 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until, battery_percent, battery_charging, battery_fact_at"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, music_word, music_word_since_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until, battery_percent, battery_charging, battery_fact_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
@@ -1952,7 +2019,9 @@ async function loadFleet(user) {
       // 11, 2026: a cleared fault must not sit at the top of the
       // screen as if it were not fixed).
       if (latest && latest.state === "failed" &&
-          !(rt.conducting && rt.music_active === true)) {
+          !(rt.conducting && (rt.music_word
+            ? rt.music_word === "playing"
+            : rt.music_active === true))) {
         pushAlert(unitName + " — " +
           (CMD_LABEL[latest.type] || String(latest.type).toUpperCase()) +
           " COMMAND FAILED" +
@@ -1966,8 +2035,24 @@ async function loadFleet(user) {
       // The music truth alert (November 6, 2026): a standing
       // session whose phone reports the music is NOT playing
       // names itself here, with the phone's reason when it
-      // sent one.
-      if (rt.conducting && rt.music_active === false) {
+      // sent one. For a unit reporting the music word
+      // (1.0.17), the alert follows the word — the phone has
+      // already proven the stop across its own heartbeats
+      // before the word may stand, so the raw fact's flicker
+      // no longer raises or clears this alert — and the two
+      // never-started words raise their own named alerts.
+      // Wordless units keep the boolean condition exactly.
+      if (rt.music_word) {
+        if (rt.music_word === "not_playing") {
+          const reasonLabel = musicReasonLabel(rt.music_reason);
+          pushAlert(unitName + " — MUSIC NOT PLAYING" +
+            (reasonLabel ? " · " + reasonLabel : ""));
+        } else if (rt.music_word === "music_never_started") {
+          pushAlert(unitName + " — MUSIC NEVER STARTED");
+        } else if (rt.music_word === "app_never_opened") {
+          pushAlert(unitName + " — APP NEVER OPENED");
+        }
+      } else if (rt.conducting && rt.music_active === false) {
         const reasonLabel = musicReasonLabel(rt.music_reason);
         pushAlert(unitName + " — MUSIC NOT PLAYING" +
           (reasonLabel ? " · " + reasonLabel : ""));
