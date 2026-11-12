@@ -198,6 +198,22 @@
     letter-spacing: .08em; margin-bottom: 6px;
   }
   .update-banner .ub-line { font-size: 13.5px; line-height: 1.45; }
+  /* Update notice control (November 12, 2026): the operator's
+     own handle on the release gate's email pass — see the
+     script at noticeCall. It stands at the top of the fleet
+     view in the banner's dress (the same gold edge and head
+     voice), and it renders on the owner account only: a
+     client account never sees it. */
+  .notice-ctl {
+    background: var(--bg); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
+  }
+  .notice-ctl .nc-head {
+    color: var(--gold); font-size: 13px; font-weight: 700;
+    letter-spacing: .08em; margin-bottom: 6px;
+  }
+  .notice-ctl .nc-line { font-size: 13.5px; line-height: 1.45; }
+  .notice-ctl .nc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   /* Step 7 Part 4 — the finishing pieces.
      Queue reset: the quiet sibling on the controls row — same
      34px / 7px rounding as every control, but in the secondary
@@ -444,6 +460,16 @@
     </div>
     <div id="fleetView">
       <div id="alerts" class="alerts" hidden></div>
+      <div id="noticeCtl" class="notice-ctl" hidden>
+        <div class="nc-head">UPDATE NOTICE</div>
+        <div id="noticeResults"></div>
+        <div class="nc-actions">
+          <button id="noticeCheckBtn" type="button" class="ctl-btn">CHECK RECIPIENTS</button>
+          <button id="noticeSendBtn" type="button" class="ctl-btn primary" hidden>SEND NOTICE</button>
+          <button id="noticeTestBtn" type="button" class="ctl-btn quiet">SELF TEST</button>
+        </div>
+        <div id="noticeLine" class="cmd-line"></div>
+      </div>
       <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
       <div id="orgs"></div>
       <div id="noMatch" class="note" hidden>No companies or units match.</div>
@@ -1928,6 +1954,13 @@ async function loadFleet(user) {
     ? fleets.filter(o => !o.is_root_authority).map(o => o.id) : []);
   const clientsNavBtn = document.getElementById("clientsNavBtn");
   if (clientsNavBtn) clientsNavBtn.hidden = clientOrgIds.size === 0;
+  // The UPDATE NOTICE control renders on the owner account
+  // alone (its section stands at the top of the fleet view):
+  // seesRoot is the usage block's test — an account that sees
+  // its own root organization is the operator's; a client
+  // account sees none and never unhides the control.
+  const noticeCtl = document.getElementById("noticeCtl");
+  if (noticeCtl) noticeCtl.hidden = !seesRoot;
   // A restored Clients view must never strand an account that
   // has no client organizations (TA's #87 review): fall back
   // to the fleet — e.g. the owner viewed Clients, signed out,
@@ -2407,6 +2440,160 @@ async function agreementCall(action, version) {
   }
   return payload;
 }
+
+// --- Update notice control (owner-side) -------------------
+// The release gate's email pass (November 9, 2026) shipped
+// with a gate and no handle: eps-update-notice answers only
+// a signed-in operator, and nothing on this page could call
+// it — the 1.0.17 notice went out by hand from a browser
+// console (Anthony's run, November 12, 2026). This control
+// is the handle. It renders only when the signed-in account
+// sees the root organization (loadFleet's seesRoot, the
+// usage block's test), and the function's own definers
+// still refuse any non-operator caller inside the database
+// — the control is a convenience; the gate never moved.
+// The order is fixed: CHECK RECIPIENTS runs the dry run and
+// names the current release and every candidate first;
+// SEND NOTICE stands only while a preview with candidates
+// stands, and any send attempt spends the preview, so a
+// second send always takes a fresh dry run. SELF TEST sends
+// one copy to the operator alone and never touches a client.
+let noticePreview = null;  // the standing dry run's payload
+
+async function noticeCall(mode) {
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) throw new Error("no session");
+  const resp = await fetch(cfg.url + "/functions/v1/eps-update-notice", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": cfg.anonKey,
+      "Authorization": "Bearer " + session.access_token,
+    },
+    body: JSON.stringify({ mode }),
+  });
+  const payload = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(payload.code || ("HTTP " + resp.status));
+    err.code = payload.code || null;
+    throw err;
+  }
+  return payload;
+}
+
+function noticeSetLine(text, bad) {
+  const line = document.getElementById("noticeLine");
+  if (!line) return;
+  line.textContent = text || "";
+  line.className = "cmd-line" + (bad ? " bad" : "");
+}
+
+function noticeBusy(busy) {
+  ["noticeCheckBtn", "noticeSendBtn", "noticeTestBtn"].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = !!busy;
+  });
+}
+
+function noticeRenderResults(html) {
+  const host = document.getElementById("noticeResults");
+  if (host) host.innerHTML = html;
+}
+
+function noticeCandidateLine(c) {
+  const n = Number(c.behind_count);
+  const units = Number.isFinite(n)
+    ? (n === 1 ? "1 UNIT BEHIND" : n + " UNITS BEHIND")
+    : "BEHIND COUNT UNKNOWN";
+  return "<div class='nc-line'>" + esc(c.recipient || "") +
+    " — " + units + "</div>";
+}
+
+document.getElementById("noticeCheckBtn").addEventListener("click", async () => {
+  noticeBusy(true);
+  noticeSetLine("CHECKING…");
+  try {
+    const payload = await noticeCall("dry_run");
+    noticePreview = payload;
+    const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+    let html = "<div class='nc-line'>" +
+      (payload.release_version_name
+        ? "CURRENT RELEASE — " + esc(payload.release_version_name)
+        : "NO CURRENT RELEASE STANDS.") + "</div>";
+    if (!candidates.length) {
+      html += "<div class='nc-line'>NO CLIENT FLEET IS BEHIND — NO NOTICE TO SEND.</div>";
+    } else {
+      candidates.forEach(c => { html += noticeCandidateLine(c); });
+    }
+    noticeRenderResults(html);
+    const sendBtn = document.getElementById("noticeSendBtn");
+    if (sendBtn) sendBtn.hidden = !candidates.length;
+    noticeSetLine(candidates.length ? "PREVIEW ONLY — NOTHING HAS BEEN SENT." : "");
+  } catch (e) {
+    noticePreview = null;
+    const sendBtn = document.getElementById("noticeSendBtn");
+    if (sendBtn) sendBtn.hidden = true;
+    noticeSetLine("CHECK FAILED — " + (e.code || e.message || e), true);
+  } finally {
+    noticeBusy(false);
+  }
+});
+
+document.getElementById("noticeSendBtn").addEventListener("click", async () => {
+  if (!noticePreview) return;
+  const byOrg = {};
+  (noticePreview.candidates || []).forEach(c => {
+    byOrg[c.organization_id] = c.recipient;
+  });
+  noticeBusy(true);
+  noticeSetLine("SENDING…");
+  try {
+    const payload = await noticeCall("send");
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    let html = "<div class='nc-line'>" +
+      (payload.release_version_name
+        ? "NOTICE FOR RELEASE — " + esc(payload.release_version_name)
+        : "NOTICE RESULTS") + "</div>";
+    if (!results.length) {
+      html += "<div class='nc-line'>NO ORGANIZATION WAS SENT A NOTICE.</div>";
+    } else {
+      results.forEach(r => {
+        const who = byOrg[r.organization_id] || r.organization_id || "CLIENT";
+        html += "<div class='nc-line'>" + esc(who) + " — " +
+          esc(String(r.outcome || "unknown").toUpperCase()) + "</div>";
+      });
+    }
+    noticeRenderResults(html);
+    noticeSetLine("SEND COMPLETE — A NEW SEND TAKES A FRESH CHECK.");
+  } catch (e) {
+    noticeSetLine("SEND FAILED — " + (e.code || e.message || e), true);
+  } finally {
+    // A send attempt — proven or refused — spends the
+    // preview: the candidates may have changed either way,
+    // and the next send always starts from a fresh dry run.
+    noticePreview = null;
+    const sendBtn = document.getElementById("noticeSendBtn");
+    if (sendBtn) sendBtn.hidden = true;
+    noticeBusy(false);
+  }
+});
+
+document.getElementById("noticeTestBtn").addEventListener("click", async () => {
+  noticeBusy(true);
+  noticeSetLine("SENDING THE SELF TEST…");
+  try {
+    const payload = await noticeCall("self_test");
+    if (payload.sent) {
+      noticeSetLine("SELF TEST SENT TO " + (payload.recipient || "THE OPERATOR") + ".");
+    } else {
+      noticeSetLine("SELF TEST DID NOT SEND.", true);
+    }
+  } catch (e) {
+    noticeSetLine("SELF TEST FAILED — " + (e.code || e.message || e), true);
+  } finally {
+    noticeBusy(false);
+  }
+});
 
 async function enterDashboard(user) {
   hide("signin");
