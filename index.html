@@ -1113,6 +1113,19 @@ function dispatchFailureLabel(rt) {
   return (act ? act + " · " : "") + cat;
 }
 
+// The battery line (1.0.16, November 11, 2026): the unit's
+// battery level as a sub-line under its state, with the
+// charging fact beside it — the pair the phone reports at
+// every check-in. No reported level, no line: a unit on an
+// older build makes no battery claim, and the dashboard
+// never invents one.
+function batteryText(rt) {
+  if (!rt || typeof rt.battery_percent !== "number" ||
+      !Number.isFinite(rt.battery_percent)) return null;
+  return "BATTERY " + Math.round(rt.battery_percent) + "%" +
+    (rt.battery_charging === true ? " · CHARGING" : "");
+}
+
 // The live window (visibility build): while a unit's window
 // stands, answers land in under a minute; outside one, a
 // command's first hop rides the unit's next check-in. The
@@ -1639,7 +1652,7 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until, battery_percent, battery_charging, battery_fact_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
@@ -1670,11 +1683,19 @@ async function loadFleet(user) {
   // nothing by its absence.
   const releaseRead = reads[9] || {};
   let currentReleaseCode = null;
+  let currentReleaseNotes = null;
   if (!releaseRead.error) {
     const rel = Array.isArray(releaseRead.data)
       ? releaseRead.data[0] : releaseRead.data;
     const code = rel ? Number(rel.version_code) : NaN;
     if (Number.isFinite(code) && code > 0) currentReleaseCode = code;
+    // The release's own notes (1.0.16): the banner states
+    // what the update does, in the release's words, whenever
+    // they stand. No notes, no line — nothing fabricated.
+    const notes = rel ? rel.release_notes : null;
+    if (typeof notes === "string" && notes.trim() !== "") {
+      currentReleaseNotes = notes.trim();
+    }
   }
   // Account state comes from the system's own computation
   // (eps.account_org_entitlement_state), one call per visible
@@ -1896,12 +1917,14 @@ async function loadFleet(user) {
       // sub-line under the unit's state, in plain words, shown
       // while the triple stands and gone when it clears.
       const df = dispatchFailureLabel(rt);
+      const batt = batteryText(rt);
       const statusHtml = esc(st.word) +
         (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "") +
         (st.sub ? "<div class='sub-line'>" + esc(st.sub) + "</div>" : "") +
         (df ? "<div class='sub-line'>" + esc(df) + "</div>" : "") +
         (times ? "<div class='sub-line'>" + esc(times) + "</div>" : "") +
-        (last ? "<div class='sub-line'>" + esc(last) + "</div>" : "");
+        (last ? "<div class='sub-line'>" + esc(last) + "</div>" : "") +
+        (batt ? "<div class='sub-line'>" + esc(batt) + "</div>" : "");
       unitStatusHtml[u.id] = statusHtml;
       const ver = versionOf[u.id];
       // Critical alerts (Part 3), unit level — each line names
@@ -2118,6 +2141,9 @@ async function loadFleet(user) {
     const updateBannerHtml = fleetBehind
       ? "<div class='update-banner' role='alert'>" +
           "<div class='ub-head'>UPDATE AVAILABLE</div>" +
+          (currentReleaseNotes
+            ? "<div class='ub-line'>" + esc(currentReleaseNotes) + "</div>"
+            : "") +
           "<div class='ub-line'>ONE OR MORE PHONES IN THIS FLEET ARE NOT ON THE CURRENT VERSION. THIS NOTICE CLEARS WHEN EVERY PHONE IS CURRENT.</div>" +
         "</div>"
       : "";
