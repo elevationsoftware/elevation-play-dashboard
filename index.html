@@ -214,6 +214,31 @@
   }
   .notice-ctl .nc-line { font-size: 13.5px; line-height: 1.45; }
   .notice-ctl .nc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  /* Client support (November 13, 2026): the client's own door
+     to Elevation support — see the script at supportCall. It
+     stands at the top of the fleet view in the notice
+     control's dress (the same gold edge and head voice), and
+     it renders on CLIENT accounts only — the exact inverse
+     of the update notice control above it: the owner account
+     never sees it. The field takes the page's own input
+     dress, full width, capped by the door's own bound. */
+  .support-ctl {
+    background: var(--bg); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
+  }
+  .support-ctl .sc-head {
+    color: var(--gold); font-size: 13px; font-weight: 700;
+    letter-spacing: .08em; margin-bottom: 6px;
+  }
+  .support-ctl .sc-line { font-size: 13.5px; line-height: 1.45; }
+  .support-ctl textarea {
+    width: 100%; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid var(--outline); background: var(--bg);
+    color: var(--text); font-size: 15px; font-family: inherit;
+    line-height: 1.45; resize: vertical; margin-top: 10px;
+  }
+  .support-ctl .sc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .support-ctl .sc-actions .ctl-btn { margin-top: 0; }
   /* Step 7 Part 4 — the finishing pieces.
      Queue reset: the quiet sibling on the controls row — same
      34px / 7px rounding as every control, but in the secondary
@@ -469,6 +494,15 @@
           <button id="noticeTestBtn" type="button" class="ctl-btn quiet">SELF TEST</button>
         </div>
         <div id="noticeLine" class="cmd-line"></div>
+      </div>
+      <div id="supportCtl" class="support-ctl" hidden>
+        <div class="sc-head">SUPPORT</div>
+        <div class="sc-line">Questions or problems with your fleet — write to Elevation support here. Your account is attached automatically, and replies go to your account email.</div>
+        <textarea id="supportText" maxlength="4000" rows="5" placeholder="Describe the problem" aria-label="Support message"></textarea>
+        <div class="sc-actions">
+          <button id="supportSendBtn" type="button" class="ctl-btn primary">SUBMIT</button>
+        </div>
+        <div id="supportLine" class="cmd-line"></div>
       </div>
       <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
       <div id="orgs"></div>
@@ -1961,6 +1995,15 @@ async function loadFleet(user) {
   // account sees none and never unhides the control.
   const noticeCtl = document.getElementById("noticeCtl");
   if (noticeCtl) noticeCtl.hidden = !seesRoot;
+  // The SUPPORT section is that gate's exact inverse: it
+  // renders on client accounts only (an account that sees
+  // no root organization), at the same top of the fleet
+  // view. The owner never sees it — and eps-support's own
+  // identity definer refuses an owner-side caller inside
+  // the database besides, so the section is a convenience;
+  // the gate never moved.
+  const supportCtl = document.getElementById("supportCtl");
+  if (supportCtl) supportCtl.hidden = seesRoot;
   // A restored Clients view must never strand an account that
   // has no client organizations (TA's #87 review): fall back
   // to the fleet — e.g. the owner viewed Clients, signed out,
@@ -2592,6 +2635,70 @@ document.getElementById("noticeTestBtn").addEventListener("click", async () => {
     noticeSetLine("SELF TEST FAILED — " + (e.code || e.message || e), true);
   } finally {
     noticeBusy(false);
+  }
+});
+
+// --- Client support (client-side) -------------------------
+// The client's own door to Elevation support (November 13,
+// 2026): the section above stands on client accounts only
+// (loadFleet's inverse gate — the owner never sees it). The
+// body carries ONLY the client's words: no organization, no
+// account, no address — eps-support derives all of it from
+// the signed-in session inside the database, and its reply
+// goes to the account email. One problem, one message, one
+// thread: a successful send clears the field, so the next
+// problem starts a fresh message.
+
+async function supportCall(message) {
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) throw new Error("no session");
+  const resp = await fetch(cfg.url + "/functions/v1/eps-support", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": cfg.anonKey,
+      "Authorization": "Bearer " + session.access_token,
+    },
+    body: JSON.stringify({ message }),
+  });
+  const payload = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(payload.code || ("HTTP " + resp.status));
+    err.code = payload.code || null;
+    throw err;
+  }
+  return payload;
+}
+
+function supportSetLine(text, bad) {
+  const line = document.getElementById("supportLine");
+  if (!line) return;
+  line.textContent = text || "";
+  line.className = "cmd-line" + (bad ? " bad" : "");
+}
+
+document.getElementById("supportSendBtn").addEventListener("click", async () => {
+  const field = document.getElementById("supportText");
+  const btn = document.getElementById("supportSendBtn");
+  const message = field ? field.value : "";
+  if (!message || !message.trim()) {
+    supportSetLine("WRITE YOUR MESSAGE FIRST.", true);
+    return;
+  }
+  if (btn) btn.disabled = true;
+  supportSetLine("SENDING…");
+  try {
+    const payload = await supportCall(message);
+    if (payload.sent) {
+      if (field) field.value = "";
+      supportSetLine("Sent. Support will reply to your account email.");
+    } else {
+      supportSetLine("YOUR MESSAGE DID NOT SEND — TRY AGAIN.", true);
+    }
+  } catch (e) {
+    supportSetLine("SEND FAILED — " + (e.code || e.message || e), true);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 });
 
