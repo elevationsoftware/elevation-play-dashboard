@@ -239,6 +239,37 @@
   }
   .support-ctl .sc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .support-ctl .sc-actions .ctl-btn { margin-top: 0; }
+  /* Fleet report (November 13, 2026): the Specialist's
+     weekly report, stacked on the owner dashboard — see the
+     script at fleetReportsCall. It stands in the notice
+     control's dress (the same gold edge and head voice) and
+     renders on the OWNER account only, the notice control's
+     gate: a client account never unhides it, and the read
+     door behind it refuses a client caller inside the
+     database besides. The newest week stands open; older
+     weeks sit beneath it in their own folds — the stack
+     itself is the archive, nothing moves or deletes. */
+  .report-ctl {
+    background: var(--bg); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
+  }
+  .report-ctl .rc-head {
+    color: var(--gold); font-size: 13px; font-weight: 700;
+    letter-spacing: .08em; margin-bottom: 6px;
+  }
+  .report-ctl .rc-week { margin-top: 12px; }
+  .report-ctl .rc-week:first-child { margin-top: 4px; }
+  .report-ctl .rc-title { font-size: 15px; font-weight: 700; }
+  .report-ctl .rc-headline { font-size: 13.5px; line-height: 1.45; margin-top: 2px; }
+  .report-ctl .rc-sec {
+    color: var(--gold); font-size: 12px; font-weight: 700;
+    letter-spacing: .08em; margin-top: 10px;
+  }
+  .report-ctl .rc-line { font-size: 13.5px; line-height: 1.45; }
+  .report-ctl details.rc-week summary {
+    cursor: pointer; font-size: 15px; font-weight: 700;
+  }
+  .report-ctl .rc-empty { font-size: 13.5px; line-height: 1.45; }
   /* Step 7 Part 4 — the finishing pieces.
      Queue reset: the quiet sibling on the controls row — same
      34px / 7px rounding as every control, but in the secondary
@@ -503,6 +534,11 @@
           <button id="supportSendBtn" type="button" class="ctl-btn primary">SUBMIT</button>
         </div>
         <div id="supportLine" class="cmd-line"></div>
+      </div>
+      <div id="reportCtl" class="report-ctl" hidden>
+        <div class="rc-head">FLEET REPORT</div>
+        <div id="reportList"></div>
+        <div id="reportLine" class="cmd-line"></div>
       </div>
       <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
       <div id="orgs"></div>
@@ -2004,6 +2040,16 @@ async function loadFleet(user) {
   // the gate never moved.
   const supportCtl = document.getElementById("supportCtl");
   if (supportCtl) supportCtl.hidden = seesRoot;
+  // The FLEET REPORT section carries the notice control's
+  // own gate: owner account only. The read door behind it
+  // (eps-fleet-reports) refuses a non-owner caller inside
+  // the database besides, so the section is presentation;
+  // the gate never moved. The reports load with the fleet —
+  // a failed read leaves the section standing with its line
+  // saying so, never a fabricated report.
+  const reportCtl = document.getElementById("reportCtl");
+  if (reportCtl) reportCtl.hidden = !seesRoot;
+  if (seesRoot) loadFleetReports();
   // A restored Clients view must never strand an account that
   // has no client organizations (TA's #87 review): fall back
   // to the fleet — e.g. the owner viewed Clients, signed out,
@@ -2637,6 +2683,136 @@ document.getElementById("noticeTestBtn").addEventListener("click", async () => {
     noticeBusy(false);
   }
 });
+
+// --- Fleet report (owner-side) --------------------------
+// The Specialist's weekly report, stacked on the owner
+// dashboard (November 13, 2026): every Friday the
+// Specialist posts one report through its own door into
+// the system's store; this section reads the store back
+// through eps-fleet-reports with the owner's signed-in
+// session. The read door answers only a root-authority
+// member — a client account is refused inside the
+// database — and this section renders on the owner
+// account only (loadFleet's gate, the notice control's).
+// The newest week stands open at the top; older weeks sit
+// beneath it in folds. The stack is the archive: nothing
+// here moves or deletes a report. A failed read leaves
+// the section standing with its line saying so — a report
+// is never fabricated.
+
+async function fleetReportsCall() {
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) throw new Error("no session");
+  const resp = await fetch(cfg.url + "/functions/v1/eps-fleet-reports", {
+    method: "GET",
+    headers: {
+      "apikey": cfg.anonKey,
+      "Authorization": "Bearer " + session.access_token,
+    },
+  });
+  const payload = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const err = new Error(payload.code || ("HTTP " + resp.status));
+    err.code = payload.code || null;
+    throw err;
+  }
+  return Array.isArray(payload.reports) ? payload.reports : [];
+}
+
+function reportDateLabel(iso) {
+  const d = new Date(String(iso) + "T12:00:00");
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString("en-US",
+    { month: "long", day: "numeric", year: "numeric" });
+}
+
+function reportDowntime(minutes) {
+  const m = Math.max(0, Math.round(Number(minutes) || 0));
+  if (m < 60) return m + (m === 1 ? " minute" : " minutes");
+  const h = Math.floor(m / 60), rest = m % 60;
+  return h + (h === 1 ? " hour" : " hours") +
+    (rest ? " " + rest + (rest === 1 ? " minute" : " minutes") : "");
+}
+
+function reportEl(tag, cls, text) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function renderReportWeek(row, open) {
+  const num = (x) => Number(x) || 0;
+  const rep = (row && typeof row.report === "object" && row.report) || {};
+  const head = (rep.headline && typeof rep.headline === "object")
+    ? rep.headline : {};
+  const title = "Week of " + reportDateLabel(row.week_start) +
+    " – " + reportDateLabel(row.week_end);
+  const wrap = reportEl(open ? "div" : "details", "rc-week");
+  if (open) wrap.appendChild(reportEl("div", "rc-title", title));
+  else wrap.appendChild(reportEl("summary", null, title));
+  const headline = num(head.problems) === 0
+    ? "No problems this week — the fleet ran clean all week."
+    : num(head.problems) + (num(head.problems) === 1 ? " problem" : " problems") +
+      " — " + num(head.resolved) + " resolved by the Watchmen, " +
+      num(head.escalated) + " escalated, " +
+      reportDowntime(head.downtime_minutes) + " down, " +
+      num(head.clean_days) +
+      (num(head.clean_days) === 1 ? " clean day." : " clean days.");
+  wrap.appendChild(reportEl("div", "rc-headline", headline));
+  if (typeof rep.coverage === "string" && rep.coverage !== "complete") {
+    wrap.appendChild(reportEl("div", "rc-line", "Coverage: " + rep.coverage));
+  }
+  const units = Array.isArray(rep.units) ? rep.units : [];
+  units.forEach(u => {
+    if (!u || typeof u !== "object") return;
+    let line = String(u.label || "") +
+      (u.city ? " (" + u.city + ")" : "") + " — ";
+    if (num(u.problems) === 0) line += "clean all week.";
+    else {
+      line += num(u.problems) +
+        (num(u.problems) === 1 ? " problem, " : " problems, ") +
+        reportDowntime(u.downtime_minutes) + " down, streak " +
+        (u.streak || "—") +
+        (u.last_problem ? "; last problem " + u.last_problem : "") + ".";
+    }
+    wrap.appendChild(reportEl("div", "rc-line", line));
+  });
+  [["NEEDED YOUR HANDS", rep.needed_hands, "Nothing needed your hands this week."],
+   ["WATCH ITEMS", rep.watch_items, "No watch items."],
+   ["CHANGES THIS WEEK", rep.changes, "No changes recorded."],
+  ].forEach(([secHead, lines, empty]) => {
+    wrap.appendChild(reportEl("div", "rc-sec", secHead));
+    const arr = Array.isArray(lines) ? lines : [];
+    if (!arr.length) wrap.appendChild(reportEl("div", "rc-line", empty));
+    arr.forEach(t => wrap.appendChild(reportEl("div", "rc-line", String(t))));
+  });
+  return wrap;
+}
+
+async function loadFleetReports() {
+  const list = document.getElementById("reportList");
+  const line = document.getElementById("reportLine");
+  if (!list) return;
+  try {
+    const rows = await fleetReportsCall();
+    list.replaceChildren();
+    if (!rows.length) {
+      list.appendChild(reportEl("div", "rc-empty",
+        "No fleet reports yet. The first report lands Friday, November 20, 2026."));
+    } else {
+      rows.forEach((row, i) =>
+        list.appendChild(renderReportWeek(row, i === 0)));
+    }
+    if (line) { line.textContent = ""; line.className = "cmd-line"; }
+  } catch (e) {
+    if (line) {
+      line.textContent = "REPORTS COULD NOT BE LOADED — " +
+        (e.code || e.message || e);
+      line.className = "cmd-line bad";
+    }
+  }
+}
 
 // --- Client support (client-side) -------------------------
 // The client's own door to Elevation support (November 13,
