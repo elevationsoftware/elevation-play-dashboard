@@ -515,6 +515,15 @@
       </div>
     </div>
     <div id="fleetView">
+      <div id="supportCtl" class="support-ctl" hidden>
+        <div class="sc-head">CONTACT SUPPORT</div>
+        <div class="sc-line">Questions or problems with your fleet — write to Elevation support here. Your account is attached automatically, and replies go to your account email.</div>
+        <textarea id="supportText" maxlength="4000" rows="5" placeholder="Describe the problem" aria-label="Support message"></textarea>
+        <div class="sc-actions">
+          <button id="supportSendBtn" type="button" class="ctl-btn primary">SUBMIT</button>
+        </div>
+        <div id="supportLine" class="cmd-line"></div>
+      </div>
       <div id="alerts" class="alerts" hidden></div>
       <div id="noticeCtl" class="notice-ctl" hidden>
         <div class="nc-head">UPDATE NOTICE</div>
@@ -525,15 +534,6 @@
           <button id="noticeTestBtn" type="button" class="ctl-btn quiet">SELF TEST</button>
         </div>
         <div id="noticeLine" class="cmd-line"></div>
-      </div>
-      <div id="supportCtl" class="support-ctl" hidden>
-        <div class="sc-head">SUPPORT</div>
-        <div class="sc-line">Questions or problems with your fleet — write to Elevation support here. Your account is attached automatically, and replies go to your account email.</div>
-        <textarea id="supportText" maxlength="4000" rows="5" placeholder="Describe the problem" aria-label="Support message"></textarea>
-        <div class="sc-actions">
-          <button id="supportSendBtn" type="button" class="ctl-btn primary">SUBMIT</button>
-        </div>
-        <div id="supportLine" class="cmd-line"></div>
       </div>
       <div id="reportCtl" class="report-ctl" hidden>
         <div class="rc-head">FLEET REPORT</div>
@@ -1846,12 +1846,22 @@ async function loadFleet(user) {
   // nothing by its absence.
   const releaseRead = reads[9] || {};
   let currentReleaseCode = null;
+  let currentReleaseName = null;
   let currentReleaseNotes = null;
   if (!releaseRead.error) {
     const rel = Array.isArray(releaseRead.data)
       ? releaseRead.data[0] : releaseRead.data;
     const code = rel ? Number(rel.version_code) : NaN;
     if (Number.isFinite(code) && code > 0) currentReleaseCode = code;
+    // The release's version name (November 14, 2026,
+    // Exchange LXXVI): the banner states the current
+    // version by name, so a client can see which version
+    // is current and how far behind its fleet stands.
+    // No name, no line — nothing fabricated.
+    const name = rel ? rel.version_name : null;
+    if (typeof name === "string" && name.trim() !== "") {
+      currentReleaseName = name.trim();
+    }
     // The release's own notes (1.0.16): the banner states
     // what the update does, in the release's words, whenever
     // they stand. No notes, no line — nothing fabricated.
@@ -2348,6 +2358,10 @@ async function loadFleet(user) {
     const updateBannerHtml = fleetBehind
       ? "<div class='update-banner' role='alert'>" +
           "<div class='ub-head'>UPDATE AVAILABLE</div>" +
+          (currentReleaseName
+            ? "<div class='ub-line'>CURRENT VERSION: " +
+              esc(currentReleaseName) + "</div>"
+            : "") +
           (currentReleaseNotes
             ? "<div class='ub-line'>" + esc(currentReleaseNotes) + "</div>"
             : "") +
