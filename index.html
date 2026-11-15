@@ -1044,6 +1044,23 @@ function platLabel(stored) {
   return stored ? String(stored).toUpperCase() : "—";
 }
 
+// The platform cell's letter (1.0.19, corrected November 14,
+// 2026): the letter answers "which app is playing". When a
+// media observation stands, it alone answers: the music's
+// own platform when one is playing, and — when the
+// observation stands with NO platform (observed silence:
+// access on, neither app playing) — the neutral placeholder,
+// never the last session's platform. Falling back there
+// would print the dead session's letter as if it were the
+// playing app: the ghost this build exists to kill. Only a
+// unit with NO observation at all (an older build, or access
+// not yet granted) keeps the standing derivation —
+// reported_platform, then current_platform — unchanged.
+function platformCellLabel(rt) {
+  if (rt && rt.media_observed) return platLabel(rt.music_platform);
+  return platLabel((rt && rt.reported_platform) || (rt && rt.current_platform));
+}
+
 // Last activity: relative first, the clock time second —
 // "6M AGO · 12:41 AM"; a fresh stamp reads "JUST NOW".
 function lastActivityText(rt) {
@@ -1153,6 +1170,25 @@ function sessionTimesText(rt) {
   const mins = Math.round((end.getTime() - start.getTime()) / 60000);
   return "STARTED " + clock(start) + " · ENDS " + clock(end) +
     " · " + mins + " MIN";
+}
+
+// The session truth (1.0.19, November 14, 2026): the card
+// states the two facts separately — the music's own app in
+// the platform cell (the media observation's platform, when
+// one stands) and, here, whether a session stands. The
+// marker stands only while the phone's standing media
+// observation stands (its latest report took one): a unit
+// that has never reported one — an earlier build, or
+// notification access not yet granted — keeps exactly the
+// card it has always had. SESSION while a session is being
+// conducted; NO SESSION otherwise — including while
+// observed music plays with no session standing, the state
+// this line exists to make visible (a session ended on
+// November 14, 2026, YouTube kept playing outside EPS, and
+// the card showed the dead session's platform for an hour).
+function sessionMarkerText(rt) {
+  if (!rt || !rt.media_fact_at) return null;
+  return rt.conducting ? "SESSION" : "NO SESSION";
 }
 
 // The deepened status: the unit's lifecycle word stands for a
@@ -1815,7 +1851,7 @@ async function loadFleet(user) {
       eps().from("organizations").select("id, slug, display_name, is_root_authority, is_test").order("display_name"),
       eps().from("system_units").select("id, organization_id, unit_key, status, operator_disabled"),
       eps().from("fleet_label_assignments").select("system_unit_id, label").is("unassigned_at", null),
-      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, music_word, music_word_since_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until, battery_percent, battery_charging, battery_fact_at"),
+      eps().from("unit_runtime_state").select("system_unit_id, current_platform, updated_at, local_disabled, reported_platform, conducting, current_entry, session_started_at, session_deadline_at, last_session_platform, last_session_ended_at, update_state, update_offered_code, music_active, music_reason, music_fact_at, music_word, music_word_since_at, media_observed, music_platform, media_fact_at, last_checkin_at, dispatch_category, dispatch_action, dispatch_failed_at, live_until, battery_percent, battery_charging, battery_fact_at"),
       eps().from("heartbeats").select("system_unit_id, recorded_at").order("recorded_at", { ascending: false }).limit(500),
       eps().from("billing_periods").select("organization_id, service_month, billing_state").order("service_month", { ascending: false }),
       eps().from("notice_outbox").select("organization_id, state"),
@@ -2117,9 +2153,11 @@ async function loadFleet(user) {
       // while the triple stands and gone when it clears.
       const df = dispatchFailureLabel(rt);
       const batt = batteryText(rt);
+      const sess = sessionMarkerText(rt);
       const statusHtml = esc(st.word) +
         (st.entry ? "<div class='sub-line'>" + esc(st.entry) + "</div>" : "") +
         (st.sub ? "<div class='sub-line'>" + esc(st.sub) + "</div>" : "") +
+        (sess ? "<div class='sub-line'>" + esc(sess) + "</div>" : "") +
         (df ? "<div class='sub-line'>" + esc(df) + "</div>" : "") +
         (times ? "<div class='sub-line'>" + esc(times) + "</div>" : "") +
         (last ? "<div class='sub-line'>" + esc(last) + "</div>" : "") +
@@ -2194,7 +2232,13 @@ async function loadFleet(user) {
           (dis ? "<span class='badge'>DISABLED</span>" : "") + "</span>" +
           (ver && ver.name ? "<div class='ver'>v" + esc(ver.name) + "</div>" : "") + "</td>" +
         "<td id='statuscell-" + esc(u.id) + "'>" + statusHtml + "</td>" +
-        "<td class='dim'>" + esc(platLabel(rt.reported_platform || rt.current_platform)) + "</td>" +
+        // The platform letter (1.0.19): platformCellLabel —
+        // the MUSIC's own app when the standing media
+        // observation names one; the neutral placeholder
+        // when the observation stands in silence; the
+        // standing derivation only when no observation
+        // stands at all.
+        "<td class='dim'>" + esc(platformCellLabel(rt)) + "</td>" +
         "<td class='dim'>" + esc(lastActivityText(rt)) + "</td></tr>" +
         "<tr class='ctl-row' data-usearch='" + esc((labelOf[u.id] || u.unit_key).toLowerCase()) + "'><td colspan='4'><div class='ctl'>" +
         "<span class='seg' data-seg='" + esc(u.id) + "'>" +
