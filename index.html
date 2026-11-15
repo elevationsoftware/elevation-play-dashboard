@@ -668,7 +668,7 @@ const CMD_LABEL = {
   enable_unit: "ENABLE", update_now: "UPDATE",
   restart_session: "RESTART", next_session: "NEXT",
   report_now: "REPORT",
-  shuffle_now: "SHUFFLE", play_now: "PLAY",
+  shuffle_now: "SHUFFLE", play_now: "PLAY", lock_now: "LOCK",
 };
 // Commanded update (November 6, 2026): the units of each
 // company a press of UPDATE ALL would command — those whose
@@ -676,6 +676,16 @@ const CMD_LABEL = {
 // (failed attempts and unreported standings are eligible;
 // current, working, and waiting are not). Filled at render.
 const updateAllTargets = {};
+// Fleet toggle + LOCK ALL (Exchange LXXX, November 15, 2026):
+// each org's units, split by the same operator_disabled
+// facts the per-unit DISABLE/ENABLE swap renders — the units
+// a DISABLE ALL press would still command (the
+// not-yet-disabled) and the ones an ENABLE ALL press would
+// (the disabled). lockAllTargets holds every unit of the
+// org. Filled at render, for every org card.
+const disableAllTargets = {};
+const enableAllTargets = {};
+const lockAllTargets = {};
 let actorId = null;
 const unitPlatform = {};  // unit id -> 'apple_music' | 'youtube' (the START override)
 const sentCmds = {};      // unit id -> {type, state, code} enqueued this session
@@ -1620,6 +1630,85 @@ async function pressUpdateAll(btn) {
   }
 }
 
+// FLEET TOGGLE + LOCK ALL (Exchange LXXX, November 15,
+// 2026): each fleet's two fleet-wide levers, each a
+// two-press control in the queue reset's exact pattern — the
+// first press arms the button (CONFIRM? for a few seconds,
+// then it quietly reverts to its standing label), the second
+// press sends. A confirmed press loops the fleet's units
+// through the same send path (and the same per-unit command
+// line and tracking) as their own buttons.
+const fleetActionTimers = {};
+function confirmFleetAction(btn, key, label, send) {
+  if (btn.dataset.confirming !== "1") {
+    btn.dataset.confirming = "1";
+    btn.textContent = "CONFIRM?";
+    btn.classList.add("confirming");
+    clearTimeout(fleetActionTimers[key]);
+    fleetActionTimers[key] = setTimeout(() => {
+      btn.dataset.confirming = "";
+      btn.textContent = label;
+      btn.classList.remove("confirming");
+    }, 4000);
+    return;
+  }
+  clearTimeout(fleetActionTimers[key]);
+  btn.dataset.confirming = "";
+  btn.textContent = label;
+  btn.classList.remove("confirming");
+  send();
+}
+
+// The toggle: ONE button whose label is the fleet's standing
+// state — DISABLE ALL while any unit is enabled, ENABLE ALL
+// once every unit stands disabled. A confirmed press
+// commands only the units the press would change: disable
+// skips the already-disabled, enable skips the
+// already-enabled.
+async function pressFleetToggle(btn) {
+  const orgId = btn.dataset.fleetToggle;
+  const toDisable = disableAllTargets[orgId] || [];
+  const toEnable = enableAllTargets[orgId] || [];
+  const enabling = toDisable.length === 0 && toEnable.length > 0;
+  const label = enabling ? "ENABLE ALL" : "DISABLE ALL";
+  confirmFleetAction(btn, "toggle-" + orgId, label, async () => {
+    btn.disabled = true;
+    try {
+      const targets = enabling ? toEnable : toDisable;
+      const type = enabling ? "enable_unit" : "disable_unit";
+      for (const unitId of targets) {
+        await sendCommand({
+          dataset: { unit: unitId, cmd: type },
+          disabled: false,
+        });
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// LOCK ALL: the owner's emergency lock — every unit of the
+// fleet, through the same send path, as lock_now. The phone
+// releases only its keep-awake hold and locks; EPS itself
+// keeps running behind the lock.
+async function pressLockAll(btn) {
+  const orgId = btn.dataset.lockAll;
+  confirmFleetAction(btn, "lock-" + orgId, "LOCK ALL", async () => {
+    btn.disabled = true;
+    try {
+      for (const unitId of (lockAllTargets[orgId] || [])) {
+        await sendCommand({
+          dataset: { unit: unitId, cmd: "lock_now" },
+          disabled: false,
+        });
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 // The queue reset (Part 4): a two-press control. The first
 // press arms it — the button itself becomes CONFIRM RESET? for
 // a few seconds, then quietly reverts; the second press sends.
@@ -2301,6 +2390,17 @@ async function loadFleet(user) {
     updateAllTargets[org.id] = orgUnits
       .filter(u => !updateBtnState(runtimeOf[u.id]).disabled)
       .map(u => u.id);
+    disableAllTargets[org.id] = orgUnits
+      .filter(u => !u.operator_disabled).map(u => u.id);
+    enableAllTargets[org.id] = orgUnits
+      .filter(u => !!u.operator_disabled).map(u => u.id);
+    lockAllTargets[org.id] = orgUnits.map(u => u.id);
+    // The toggle's standing label: ENABLE ALL only when
+    // every unit stands disabled; DISABLE ALL whenever any
+    // unit is still enabled.
+    const fleetToggleLabel = orgUnits.length &&
+      disableAllTargets[org.id].length === 0
+      ? "ENABLE ALL" : "DISABLE ALL";
     const period = periodOf[org.id];
     const billing = org.is_root_authority
       ? "Owner organization — not billed"
@@ -2433,7 +2533,24 @@ async function loadFleet(user) {
       "<div class='org-actions'><button type='button' class='ctl-btn' data-update-all='" +
         esc(org.id) + "'" +
         (updateAllTargets[org.id].length ? "" : " disabled") +
-        ">UPDATE ALL</button></div>" +
+        ">UPDATE ALL</button>" +
+        // Fleet toggle + LOCK ALL (Exchange LXXX; scope
+        // settled November 15, 2026): EVERY org card carries
+        // them — the owner's view on the root card and each
+        // client card, a client's own view on his own card
+        // (the same builder renders both hosts). Whose
+        // disable may be lifted by whom is fenced on the
+        // server — a disable remembers who set it; the
+        // buttons are the same everywhere they stand.
+        "<button type='button' class='ctl-btn' data-fleet-toggle='" +
+          esc(org.id) + "'" +
+          (orgUnits.length ? "" : " disabled") +
+          ">" + fleetToggleLabel + "</button>" +
+        "<button type='button' class='ctl-btn' data-lock-all='" +
+          esc(org.id) + "'" +
+          (orgUnits.length ? "" : " disabled") +
+          ">LOCK ALL</button>" +
+      "</div>" +
       (unitsFailed
         ? "<div class='note'>Units unavailable — the units read failed.</div>"
         : (rows
@@ -2492,6 +2609,12 @@ async function loadFleet(user) {
   });
   document.querySelectorAll("#orgs [data-update-all], #clientOrgs [data-update-all]").forEach(btn => {
     btn.addEventListener("click", () => pressUpdateAll(btn));
+  });
+  document.querySelectorAll("#orgs [data-fleet-toggle], #clientOrgs [data-fleet-toggle]").forEach(btn => {
+    btn.addEventListener("click", () => pressFleetToggle(btn));
+  });
+  document.querySelectorAll("#orgs [data-lock-all], #clientOrgs [data-lock-all]").forEach(btn => {
+    btn.addEventListener("click", () => pressLockAll(btn));
   });
   document.querySelectorAll("#orgs [data-seg], #clientOrgs [data-seg]").forEach(seg => {
     seg.querySelectorAll("button").forEach(b => {
