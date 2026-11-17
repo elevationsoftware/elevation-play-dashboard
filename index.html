@@ -680,6 +680,11 @@ const updateAllTargets = {};
 const disableAllTargets = {};
 const enableAllTargets = {};
 const lockAllTargets = {};
+// RESET QUEUE ALL (Exchange LXXXIII, November 17, 2026):
+// every unit of the org — any unit can be holding a pending
+// command a mistaken fleet press just queued. Filled at
+// render, for every org card.
+const resetQueueAllTargets = {};
 let actorId = null;
 const unitPlatform = {};  // unit id -> 'apple_music' | 'youtube' (the START override)
 const sentCmds = {};      // unit id -> {type, state, code} enqueued this session
@@ -1731,6 +1736,22 @@ async function resetQueue(btn) {
   btn.classList.remove("confirming");
   btn.disabled = true;
   try {
+    await invokeResetQueue(unitId);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "RESET QUEUE";
+  }
+}
+
+// The reset itself, shared by the per-unit button above and
+// RESET QUEUE ALL below: one invoke, the outcome written to
+// the unit's own command line.
+async function invokeResetQueue(unitId) {
+  if (!actorId) {
+    setCmdLine(unitId, "SIGN-IN EXPIRED — RELOAD THE PAGE", true);
+    return;
+  }
+  try {
     const { data, error } = await client.functions.invoke("eps-unit-command", {
       body: { action: "reset_queue", system_unit_id: unitId },
     });
@@ -1759,9 +1780,30 @@ async function resetQueue(btn) {
       : "QUEUE ALREADY EMPTY", false);
   } catch (e) {
     setCmdLine(unitId, "COULD NOT RESET — PLEASE TRY AGAIN", true);
+  }
+}
+
+// RESET QUEUE ALL (Exchange LXXXIII, November 17, 2026):
+// the rescue for a mistaken fleet press — DISABLE ALL, LOCK
+// ALL, or UPDATE ALL hit by accident. ONE press, immediate:
+// no confirm arm, because the button's whole job is speed —
+// the phones take their queued commands at the next minute
+// check-in, and a confirm press could let that minute tick
+// over. The press loops the fleet's units through the same
+// reset the per-unit button sends; each unit's result lands
+// on its own command line. Only commands still pending are
+// cleared — a command a phone already took stands, and is
+// undone by its own reverse (ENABLE ALL, the passcode), as
+// before.
+async function pressResetQueueAll(btn) {
+  const targets = resetQueueAllTargets[btn.dataset.resetAll] || [];
+  btn.disabled = true;
+  try {
+    for (const unitId of targets) {
+      await invokeResetQueue(unitId);
+    }
   } finally {
     btn.disabled = false;
-    btn.textContent = "RESET QUEUE";
   }
 }
 
@@ -2389,6 +2431,7 @@ async function loadFleet(user) {
     enableAllTargets[org.id] = orgUnits
       .filter(u => !!u.operator_disabled).map(u => u.id);
     lockAllTargets[org.id] = orgUnits.map(u => u.id);
+    resetQueueAllTargets[org.id] = orgUnits.map(u => u.id);
     // The toggle's standing label: ENABLE ALL only when
     // every unit stands disabled; DISABLE ALL whenever any
     // unit is still enabled.
@@ -2551,6 +2594,13 @@ async function loadFleet(user) {
           esc(org.id) + "'" +
           (orgUnits.length ? "" : " disabled") +
           ">LOCK ALL</button>" +
+        // RESET QUEUE ALL (Exchange LXXXIII, November 17,
+        // 2026): stands last in the row — the rescue for a
+        // mistaken press of any fleet button before it.
+        "<button type='button' class='ctl-btn' data-reset-all='" +
+          esc(org.id) + "'" +
+          (orgUnits.length ? "" : " disabled") +
+          ">RESET QUEUE ALL</button>" +
       "</div>" +
       (unitsFailed
         ? "<div class='note'>Units unavailable — the units read failed.</div>"
@@ -2619,6 +2669,9 @@ async function loadFleet(user) {
   });
   document.querySelectorAll("#orgs [data-lock-all], #clientOrgs [data-lock-all]").forEach(btn => {
     btn.addEventListener("click", () => pressLockAll(btn));
+  });
+  document.querySelectorAll("#orgs [data-reset-all], #clientOrgs [data-reset-all]").forEach(btn => {
+    btn.addEventListener("click", () => pressResetQueueAll(btn));
   });
   document.querySelectorAll("#orgs [data-seg], #clientOrgs [data-seg]").forEach(seg => {
     seg.querySelectorAll("button").forEach(b => {
