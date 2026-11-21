@@ -234,16 +234,21 @@
   }
   .support-ctl .sc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .support-ctl .sc-actions .ctl-btn { margin-top: 0; }
-  /* Fleet report (November 13, 2026): the Specialist's
-     weekly report, stacked on the owner dashboard — see the
-     script at fleetReportsCall. It stands in the notice
-     control's dress (the same gold edge and head voice) and
-     renders on the OWNER account only, the notice control's
-     gate: a client account never unhides it, and the read
-     door behind it refuses a client caller inside the
-     database besides. The newest week stands open; older
-     weeks sit beneath it in their own folds — the stack
-     itself is the archive, nothing moves or deletes. */
+  /* Fleet report (November 13, 2026; moved to its own page
+     November 21, 2026, Anthony's direction): the Specialist's
+     weekly report — see the script at fleetReportsCall. It
+     stands in the notice control's dress (the same gold edge
+     and head voice) and renders on the OWNER account only,
+     the notice control's gate: a client account never unhides
+     it, and the read door behind it refuses a client caller
+     inside the database besides. The reports live on their
+     own page, reached from the menu; EVERY week is a fold —
+     the newest stands open and lands on top of the ones
+     before it — and the stack itself is the archive, nothing
+     moves or deletes. While the newest report is unseen on
+     this device, a banner stands at the top of the fleet
+     page saying so; opening the report page clears it, the
+     same device-memory courtesy as THE WIZARD's dot. */
   .report-ctl {
     background: var(--bg); border: 1px solid var(--gold);
     border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
@@ -254,7 +259,6 @@
   }
   .report-ctl .rc-week { margin-top: 12px; }
   .report-ctl .rc-week:first-child { margin-top: 4px; }
-  .report-ctl .rc-title { font-size: 15px; font-weight: 700; }
   .report-ctl .rc-headline { font-size: 13.5px; line-height: 1.45; margin-top: 2px; }
   .report-ctl .rc-sec {
     color: var(--gold); font-size: 12px; font-weight: 700;
@@ -265,6 +269,13 @@
     cursor: pointer; font-size: 15px; font-weight: 700;
   }
   .report-ctl .rc-empty { font-size: 13.5px; line-height: 1.45; }
+  .report-alert-btn {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 18px;
+    color: var(--text); font-size: 14.5px; font-weight: 600;
+    font-family: inherit; animation: rise 0.6s ease-out both;
+  }
   /* Step 7 Part 4 — the finishing pieces.
      Queue reset: the quiet sibling on the controls row — same
      34px / 7px rounding as every control, but in the secondary
@@ -500,6 +511,7 @@
             <button id="fleetNavBtn" class="menu-item">Fleet</button>
             <button id="playlistNavBtn" class="menu-item">Playlist Management</button>
             <button id="clientsNavBtn" class="menu-item" hidden>Clients</button>
+            <button id="reportsNavBtn" class="menu-item" hidden>Fleet Report</button>
             <button id="wizardBtn" class="menu-item" hidden>The Wizard</button>
             <button id="rainBtn" class="menu-item">Gold Rush</button>
             <button id="downloadBtn" class="menu-item">Download the app</button>
@@ -529,11 +541,7 @@
         </div>
         <div id="noticeLine" class="cmd-line"></div>
       </div>
-      <div id="reportCtl" class="report-ctl" hidden>
-        <div class="rc-head">FLEET REPORT</div>
-        <div id="reportList"></div>
-        <div id="reportLine" class="cmd-line"></div>
-      </div>
+      <button id="reportAlert" type="button" class="report-alert-btn" hidden></button>
       <input id="fleetSearch" class="fleet-search" type="search" placeholder="Search companies and units" aria-label="Search companies and units">
       <div id="orgs"></div>
       <div id="noMatch" class="note" hidden>No companies or units match.</div>
@@ -548,6 +556,13 @@
     <div id="playlistView" hidden>
       <div class="view-head">PLAYLIST MANAGEMENT</div>
       <div id="plorgs"></div>
+    </div>
+    <div id="reportView" hidden>
+      <div id="reportCtl" class="report-ctl" hidden>
+        <div class="rc-head">FLEET REPORT</div>
+        <div id="reportList"></div>
+        <div id="reportLine" class="cmd-line"></div>
+      </div>
     </div>
     <div id="fleetErr" class="err"></div>
   </div>
@@ -788,7 +803,7 @@ let renderedOrgs = [];     // org ids rendered by the latest loadFleet, in displ
 // every company (management is occasional, and the Elevation
 // box holds the whole pool), and their toggles persist under
 // their OWN key, separate from the fleet cards' choices.
-let currentView = "fleet";  // 'fleet' | 'playlists' | 'clients'
+let currentView = "fleet";  // 'fleet' | 'playlists' | 'clients' | 'reports'
 const plOrgExpanded = {};   // org id -> bool: the playlist boxes' expansion choices
 try {
   const savedPl = JSON.parse(localStorage.getItem("epsPlOrgExpanded") || "{}");
@@ -801,15 +816,22 @@ function applyView() {
   const fleetView = document.getElementById("fleetView");
   const playlistView = document.getElementById("playlistView");
   const clientsView = document.getElementById("clientsView");
+  const reportView = document.getElementById("reportView");
   if (fleetView) fleetView.hidden = currentView !== "fleet";
   if (playlistView) playlistView.hidden = currentView !== "playlists";
   if (clientsView) clientsView.hidden = currentView !== "clients";
+  if (reportView) reportView.hidden = currentView !== "reports";
 }
 
 function setView(name) {
-  currentView = (name === "playlists" || name === "clients") ? name : "fleet";
+  currentView = (name === "playlists" || name === "clients" ||
+    name === "reports") ? name : "fleet";
   try { localStorage.setItem("epsDashView", currentView); } catch (e) {}
   applyView();
+  // Opening the report page is what "checking the fleet
+  // report" means: the new-report banner on the fleet page
+  // clears, the way THE WIZARD's dot clears on reading.
+  if (currentView === "reports") markReportsSeen();
 }
 
 // Playlist-box expansion (the refinement): the fleet summary
@@ -1960,7 +1982,8 @@ async function loadFleet(user) {
   try {
     const savedView = localStorage.getItem("epsDashView");
     currentView =
-      (savedView === "playlists" || savedView === "clients")
+      (savedView === "playlists" || savedView === "clients" ||
+       savedView === "reports")
         ? savedView : "fleet";
   } catch (e) { currentView = "fleet"; }
   applyView();
@@ -2211,21 +2234,25 @@ async function loadFleet(user) {
   // the gate never moved.
   const supportCtl = document.getElementById("supportCtl");
   if (supportCtl) supportCtl.hidden = seesRoot;
-  // The FLEET REPORT section carries the notice control's
-  // own gate: owner account only. The read door behind it
+  // The FLEET REPORT page carries the notice control's
+  // own gate: owner account only — its menu item and its
+  // page both stand behind it. The read door behind it
   // (eps-fleet-reports) refuses a non-owner caller inside
-  // the database besides, so the section is presentation;
+  // the database besides, so the gate is presentation;
   // the gate never moved. The reports load with the fleet —
-  // a failed read leaves the section standing with its line
+  // a failed read leaves the page standing with its line
   // saying so, never a fabricated report.
   const reportCtl = document.getElementById("reportCtl");
   if (reportCtl) reportCtl.hidden = !seesRoot;
+  const reportsNavBtn = document.getElementById("reportsNavBtn");
+  if (reportsNavBtn) reportsNavBtn.hidden = !seesRoot;
   if (seesRoot) loadFleetReports();
   // A restored Clients view must never strand an account that
   // has no client organizations (TA's #87 review): fall back
   // to the fleet — e.g. the owner viewed Clients, signed out,
   // and a client account signed in on the same browser.
   if (clientOrgIds.size === 0 && currentView === "clients") setView("fleet");
+  if (!seesRoot && currentView === "reports") setView("fleet");
   fleets.forEach(org => {
     // Critical alerts (Part 3), organization level: the billing
     // states the account-state read already computes. Part 4
@@ -2924,20 +2951,57 @@ document.getElementById("noticeTestBtn").addEventListener("click", async () => {
 });
 
 // --- Fleet report (owner-side) --------------------------
-// The Specialist's weekly report, stacked on the owner
-// dashboard (November 13, 2026): every Friday the
+// The Specialist's weekly report, on its own dashboard
+// page (November 13, 2026; moved to its own page November
+// 21, 2026, Anthony's direction): every Friday the
 // Specialist posts one report through its own door into
-// the system's store; this section reads the store back
+// the system's store; this page reads the store back
 // through eps-fleet-reports with the owner's signed-in
 // session. The read door answers only a root-authority
 // member — a client account is refused inside the
-// database — and this section renders on the owner
-// account only (loadFleet's gate, the notice control's).
-// The newest week stands open at the top; older weeks sit
-// beneath it in folds. The stack is the archive: nothing
-// here moves or deletes a report. A failed read leaves
-// the section standing with its line saying so — a report
-// is never fabricated.
+// database — and the page renders on the owner account
+// only (loadFleet's gate, the notice control's). Every
+// week is a fold; the newest stands open at the top of
+// the stack, each new one landing above the last. The
+// stack is the archive: nothing here moves or deletes a
+// report. A failed read leaves the page standing with
+// its line saying so — a report is never fabricated.
+//
+// The new-report banner (November 21, 2026): while the
+// newest report is unseen on this device, a banner stands
+// at the top of the FLEET page naming the week; opening
+// the report page marks it seen and the banner clears —
+// the same device-memory courtesy as THE WIZARD's dot
+// (epsWizardSeen). The mark is the newest report's week
+// start; a report that fails to load raises no banner.
+let latestReportKey = null;
+
+function reportSeenKey() {
+  try { return localStorage.getItem("epsFleetReportSeen") || ""; }
+  catch (e) { return ""; }
+}
+
+function markReportsSeen() {
+  if (!latestReportKey) return;
+  try {
+    localStorage.setItem("epsFleetReportSeen", latestReportKey);
+  } catch (e) {}
+  const banner = document.getElementById("reportAlert");
+  if (banner) banner.hidden = true;
+}
+
+function refreshReportBanner(rows) {
+  const banner = document.getElementById("reportAlert");
+  if (!banner) return;
+  latestReportKey = rows.length ? String(rows[0].week_start || "") : null;
+  if (!latestReportKey) { banner.hidden = true; return; }
+  if (currentView === "reports") { markReportsSeen(); return; }
+  if (reportSeenKey() === latestReportKey) { banner.hidden = true; return; }
+  banner.textContent = "NEW FLEET REPORT — WEEK OF " +
+    reportDateLabel(rows[0].week_start) + " – " +
+    reportDateLabel(rows[0].week_end) + " — TAP TO VIEW";
+  banner.hidden = false;
+}
 
 async function fleetReportsCall() {
   const { data: { session } } = await client.auth.getSession();
@@ -2987,9 +3051,9 @@ function renderReportWeek(row, open) {
     ? rep.headline : {};
   const title = "Week of " + reportDateLabel(row.week_start) +
     " – " + reportDateLabel(row.week_end);
-  const wrap = reportEl(open ? "div" : "details", "rc-week");
-  if (open) wrap.appendChild(reportEl("div", "rc-title", title));
-  else wrap.appendChild(reportEl("summary", null, title));
+  const wrap = reportEl("details", "rc-week");
+  if (open) wrap.open = true;
+  wrap.appendChild(reportEl("summary", null, title));
   const headline = num(head.problems) === 0
     ? "No problems this week — the fleet ran clean all week."
     : num(head.problems) + (num(head.problems) === 1 ? " problem" : " problems") +
@@ -3044,6 +3108,7 @@ async function loadFleetReports() {
         list.appendChild(renderReportWeek(row, i === 0)));
     }
     if (line) { line.textContent = ""; line.className = "cmd-line"; }
+    refreshReportBanner(rows);
   } catch (e) {
     if (line) {
       line.textContent = "REPORTS COULD NOT BE LOADED — " +
@@ -3501,13 +3566,18 @@ async function refreshFleet(btn) {
 
 document.getElementById("rainBtn").addEventListener("click", moneyRain);
 
-// The view switch (the refinement): the menu's two view items
-// show one view and hide the other; the panel's own click
+// The view switch (the refinement): the menu's view items
+// show one view and hide the others; the panel's own click
 // handler closes the menu behind the choice, as with every
-// item. The choice persists (see setView).
+// item. The choice persists (see setView). The FLEET REPORT
+// item and the fleet page's new-report banner both land on
+// the report page, and landing there is what clears the
+// banner (see markReportsSeen).
 document.getElementById("fleetNavBtn").addEventListener("click", () => setView("fleet"));
 document.getElementById("clientsNavBtn").addEventListener("click", () => setView("clients"));
 document.getElementById("playlistNavBtn").addEventListener("click", () => setView("playlists"));
+document.getElementById("reportsNavBtn").addEventListener("click", () => setView("reports"));
+document.getElementById("reportAlert").addEventListener("click", () => setView("reports"));
 
 // Download the app (Step 9 Part 1, Anthony's design, October 29,
 // 2026): the signed-in account downloads the current production
